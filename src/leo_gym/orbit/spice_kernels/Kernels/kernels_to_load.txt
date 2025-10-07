@@ -1,0 +1,9 @@
+\begindata
+KERNELS_TO_LOAD=(
+'spice_kernels/Kernels/de432s.bsp',
+'spice_kernels/Kernels/earth_000101_230311_221216.bpc',
+'spice_kernels/Kernels/gm_de431.tpc',
+'spice_kernels/Kernels/naif0012.tls',
+'spice_kernels/Kernels/pck00010.tpc',
+)
+\begintext
