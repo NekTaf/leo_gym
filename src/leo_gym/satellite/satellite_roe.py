@@ -206,7 +206,7 @@ class Satellite():
             
         for i in range(int(dt_delay+dt_duration+dt_coast)):
             if self.discrete_time_index_simulation+1 >= self.traj_len:
-                # print("WARNING: Ran out of trajectory data. Increase reference state number!")
+                print("WARNING: Ran out of trajectory data. Increase reference state number!")
                 return i
             self.sat_propagate(u=self.manplan_control_inputs[self.discrete_time_index_simulation,:])
                                 

@@ -1,5 +1,6 @@
 # Standard library
-from typing import Any, Dict, List, Union, Literal
+from typing import Any, Dict, List, Union, Literal, Callable
+from dataclasses import dataclass
 
 # Third-party
 from gymnasium.spaces import Space
@@ -9,65 +10,48 @@ from pydantic import BaseModel, ConfigDict, Field
 from leo_gym.rl_algorithms.h_ppo.actor_critic_nets import (
     PolicyNetwork,
     ValueNetwork,
+    ObservationEncoder,  # make sure this is exported in the module
 )
 
+from leo_gym.rl_algorithms.utils.utils import (
+    SquashedNormal,
+    Normal,
+)
+from typing import Any, List, Union, Callable, Literal, Optional
 
 class PPOConfig(BaseModel):
-    env_obs: Any = Field(..., description="gymnasium environment space")
-    
-    env_actions: Any = Field(...,  description="gymnasium environment space")
-    
-    gamma: float = Field(..., gt=0, description="Discount factor")
-    
-    gae_lambda: float = Field(..., ge=0, le=1, description="GAE λ")
-    
-    policy_clip: float = Field(..., gt=0, description="Clipping ε")
-    
-    target_kl: float = Field(..., ge=0, description="Target KL divergence")
-    
-    lr: float = Field(..., gt=0, description="Learning rate")
-    
-    lr_decay_coef: float = Field(..., ge=0, description="LR decay coefficient")
-    
-    init_entropy_coef: float = Field(..., ge=0,  description="Initial entropy coef")
-    
-    batch_size: int = Field(..., gt=0, description="Batch size")
-    
-    epochs: int = Field(..., gt=1, description="Epochs per update")
-    
-    n_envs: int = Field(..., gt=0, description="Number of envs")
-    
-    use_squashed_gaussian: bool = Field(...,  description="Squash Gaussian output")
-    
-    init_std: Union[float, List[float]] = Field(...,  description="Initial std dev")
-    
-    log_to_mlflow: bool = Field(..., description="Enable MLflow logging")
-    
-    normalize_advantage: bool = Field(..., description="Normalize advantage")
-    
-    model_config = ConfigDict(arbitrary_types_allowed=True,
-                              frozen=True)
-    std_type: int = Field(0, description="0: Action‐noise exploration,\
-                                        1: State-dependent Gaussian")
-    
-    policy_wrapper: Any = Field(PolicyNetwork,
-                                description="Policy network class, with modified architectures")
-    
-    critic_wrapper: Any = Field(ValueNetwork,
-                                description="Critic network class, with modified architectures")
-    
-    device: Literal["cpu", "cuda"] = Field(default="cpu",
-                                           description="Device to run the model on (cpu or cuda)")
+    env_obs: Any
+    env_actions: Any
 
+    gamma: float
+    gae_lambda: float
+    policy_clip: float
+    target_kl: float
+    lr: float
+    lr_decay_coef: float
+    init_entropy_coef: float
 
-class LagrangianConfig(BaseModel):
-    # Constraint / Lagrange settings
-    constr_limit: float = Field(..., gt=0, description="Constraint limit")
-    lag_lr: float = Field(..., gt=0, description="Lagrange LR")
-    lag_max: float = Field(..., gt=0, description="Max Lagrange multiplier")
+    batch_size: int
+    epochs: int
+    n_envs: int
 
-    # Flags to include cost penalty per action branch
-    flag_lag_update_cont: bool = Field(..., description="Update continuous lag")
-    flag_lag_update_dis: bool = Field(..., description="Update discrete lag")
+    init_std: Union[float, List[float]]
 
-    model_config = ConfigDict(frozen=True)
+    log_to_mlflow: bool
+    normalize_advantage: bool
+
+    default_num_envs: int
+    steps_per_env: int
+    max_training_timesteps: int
+    save_nets_period: int
+    trained_algorithm_config_path: Optional[str] = None
+
+    policy_wrapper: Any = PolicyNetwork
+    critic_wrapper: Any = ValueNetwork
+    observation_encoder: Any = ObservationEncoder
+    encoder_hidden_size: int = 256
+
+    device: Literal["cpu", "cuda"] = "cuda"
+    activation_fun: Any = Normal
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)

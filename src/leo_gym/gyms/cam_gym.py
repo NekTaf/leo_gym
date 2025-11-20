@@ -37,11 +37,6 @@ class CamEnvConfig(BaseModel):
         ..., description="Configuration for debris cluster dynamics object"
     )
 
-    debris_observation_feature_size: int = Field(..., ge=1, description="Size of debris obs vector")
-    max_observable_debris: int = Field(..., ge=0, description="Max debris count in obs")
-    satellite_observation_feature_size:int = Field(..., ge=1, description="Size of sat obs vector")
-    continuous_actions_size: int = Field(..., ge=1, description="Dimensionality of cont. actions")
-    discrete_actions_size: int = Field(..., ge=1, description="Number of discrete actions")
     p_max_limit: float = Field(..., gt=0, description="Max thrust limit")
     adl_req: float = Field(..., ge=0, description="ADL requirement")
     ade_norm_req: float = Field(..., ge=0, description="ADE normalization")
@@ -68,31 +63,25 @@ class CamEnv(gym.Env):
         super(CamEnv, self).__init__()
         
         self.cfg = cfg
-        
         seed_all(seed)        
-        
         self.reset()
         
         
         self.action_space = spaces.Dict({
-            "discrete": spaces.Discrete(self.cfg.discrete_actions_size),
+            "discrete": spaces.Discrete(3),
             "continuous": spaces.Box(low=np.array(self.cfg.low_action), 
                                        high=np.array(self.cfg.high_action), 
-                                       shape=(self.cfg.continuous_actions_size,), 
+                                       shape=(2,), 
                                        dtype=np.float64)
         })
-                
-        self.observation_space = spaces.Dict({
-            "nds": spaces.Box(low=-np.inf, 
-                            high=np.inf, 
-                            shape=(self.cfg.satellite_observation_feature_size,), 
-                            dtype=np.float64),
             
-            "ds": spaces.Box(low=-np.inf, 
-                            high=np.inf, 
-                            shape=(self.cfg.max_observable_debris,self.cfg.debris_observation_feature_size), 
-                            dtype=np.float64)
-        })
+        self.observation_space = spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(13,),
+            dtype=np.float64
+        )
+
                         
     
     def _observation_states(self
@@ -119,9 +108,9 @@ class CamEnv(gym.Env):
         obs_satellite = np.array((l_p,inc_p,raan_p,
                                  adl,
                                  adex, 
-                                 adey)).reshape(self.cfg.satellite_observation_feature_size,)
+                                 adey)).reshape(6,)
 
-        obs_debris = np.zeros((self.cfg.max_observable_debris,self.cfg.debris_observation_feature_size))
+        obs_debris = np.zeros((1,7))
         P_max_propagated = np.array(self.DebrisSwarm_1.metrics_at_tca)
 
         for i, (nsoe) in enumerate(non_singular_oe_s):
@@ -190,6 +179,8 @@ class CamEnv(gym.Env):
             "ds": obs_debris
         }
         
+        obs = np.concatenate([obs_satellite.ravel(), obs_debris.ravel()], axis=0)
+        
         return obs
     
 
@@ -256,15 +247,22 @@ class CamEnv(gym.Env):
 
         return dis_actions_list[action]
     
-    
+    def _clip_and_rescale(self, x, low, high):
+        x = np.asarray(x, dtype=np.float32)
+        low = np.asarray(low, dtype=np.float32)
+        high = np.asarray(high, dtype=np.float32)
+
+        x = np.clip(x, -1.0, 1.0)
+        y = low + (x + 1.0) * (high - low) / 2.0
+
+        return np.clip(y, low, high)
+
 
     def step(self, action):
         
         delay_duration_thrust:np.ndarray = action["continuous"]
+        delay_duration_thrust = self._clip_and_rescale(delay_duration_thrust, self.cfg.low_action, self.cfg.high_action)
 
-        delay_duration_thrust = np.clip(delay_duration_thrust,
-                                    self.cfg.low_action,
-                                    self.cfg.high_action)
 
         self.f_direction = self._discretize_action(int(action["discrete"]))
         manplan = self.f_direction + delay_duration_thrust.tolist()

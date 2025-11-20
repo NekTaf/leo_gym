@@ -26,7 +26,7 @@ from leo_gym.rl_algorithms.h_ppo.config import PPOConfig
 from leo_gym.rl_algorithms.h_ppo.h_ppo_agent import Agent
 from leo_gym.gyms.cam_gym import CamEnv, CamEnvConfig
 from leo_gym.utils.utils import seed_all
-from libs.leo_gym.notebooks.C3_Collision_Avoidance_Maneuvers_SMDP.train_cam_hppo_cfg import training_cfg, env_cfg, ppo_cfg
+from train_cam_hppo_cfg import training_cfg, env_cfg, ppo_cfg
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
@@ -35,8 +35,7 @@ sys.path.append(script_dir)
 SEED = 10
 seed_all(seed = SEED)
 
-enam = "cam_squashed_gaussian"
-enam = "/home/montezuma/Desktop/my_experiment"
+enam = "cam_rl_journal"
 
 
 training_cfg = training_cfg.model_copy(
@@ -61,19 +60,20 @@ def make_env(env_cfg: CamEnvConfig,
 
 if __name__ == "__main__":
     # Prepare vectorized environments
-    SEEDS = [random.randint(0, 2**32 - 1) for _ in range(training_cfg.default_num_envs)]
+    SEEDS = [random.randint(0, 2**32 - 1) for _ in range(ppo_cfg.default_num_envs)]
     print("Seeds: ",SEEDS)
     
-    env = AsyncVectorEnv([make_env(env_cfg, SEEDS, i) for i in range(training_cfg.default_num_envs)])
+    env = AsyncVectorEnv([make_env(env_cfg, SEEDS, i) for i in range(ppo_cfg.default_num_envs)])
     
-    if training_cfg.trained_algorithm_config_path is not None:
-        with open(training_cfg.trained_algorithm_config_path, "r") as f:
+    if ppo_cfg.trained_algorithm_config_path is not None:
+        with open(ppo_cfg.trained_algorithm_config_path, "r") as f:
             cfg_kwargs = json.load(f)
 
         ppo = Agent(
             env_obs=env.single_observation_space,
             env_actions=env.single_action_space,
-            cfg=PPOConfig(**cfg_kwargs),
+            ppo_cfg=PPOConfig(**cfg_kwargs),
+            env_cfg=env_cfg,
         )
         
     else:
@@ -87,10 +87,11 @@ if __name__ == "__main__":
         ppo = Agent(
             env_obs=env.single_observation_space,
             env_actions=env.single_action_space,
-            cfg=ppo_cfg,
+            ppo_cfg=ppo_cfg,
+            env_cfg=env_cfg,
         )
         
-        ppo.train(env, training_cfg, env_cfg, ppo_cfg)
+        ppo.train(env, training_cfg)
 
 
         # # ===== Save final models =====
