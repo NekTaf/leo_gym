@@ -138,7 +138,7 @@ class Satellite():
         return rv_2_roe_and_non_singular_oe(pv_sat, pv_ref)
      
     def set_initial_deviation(self, 
-                              d_kep:NDArray
+                              Droe:NDArray
                               )->None:  
         """
         d_kep = [0, 0, 0, 0, 1.2, 0] 
@@ -146,20 +146,10 @@ class Satellite():
         """
         
         rv_ref = self.rvm_eci_ref[self.discrete_time_index_simulation,:6]
+        rv_ref = rv_ref.reshape(6,)
         
-        rv_ref = rv_ref.reshape(6,1)
-        oe = rv_2_kepler_oe(rv_ref)
-
-        base = oe[[0,1,2,3,4,6],:].squeeze()  
-        d_kep_rad = np.deg2rad(np.array(d_kep))                
-        oe_mod_1d = base + d_kep_rad
-        oe_mod = oe_mod_1d.reshape(6,1)         
-
-        pv = kepler_oe_2_rv(oe_mod)
+        pv = Delta_roe_to_rv(rv_ref=rv_ref,Droe=Droe)
         
-        # pv = roe_error_init_state(roe=d_kep.reshape(6,),
-        #                              rv_r=rv_ref.reshape(6,))
-                
         pv = np.append(pv, self.rvm_eci_ref[self.discrete_time_index_simulation,6])
         pv = pv.reshape(7,)
                 

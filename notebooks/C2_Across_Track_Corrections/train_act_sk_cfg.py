@@ -56,8 +56,15 @@ env_cfg = RoeGymConfig(high_action=[15.0,110,41],
                          no_timesteps=20,
                          dt=60,
                          flag_man_type="act",
-                         Delta_kep_ranges=[[0,400],[0,0],[0.005,0.008],
-                                           [0.005,0.008], [0.5, 0.5],[0,0]],
+                         
+                         Droe_ranges=[
+                            [0,0],
+                            [0,0],
+                            [0.0,0.0],
+                            [0.0,0.0], 
+                            [-800, +800],
+                            [-800,+800]],
+                         
                          ada_target=50,
                          adi_norm_cutoff=1500,
                          adi_norm_target=100,

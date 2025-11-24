@@ -35,7 +35,7 @@ from dataclasses import dataclass
 class RoeGymConfig():
     high_action: list = None
     low_action: list = None
-    Delta_kep_ranges: list = None
+    Droe_ranges: list = None #Delta([ada, adl, adex, adey, adix, adiy])
     no_timesteps: int = None
     satellite_params: SatelliteROEConfig = None
     dt: int = None
@@ -245,100 +245,7 @@ class RoeGym(gym.Env):
         
         return 
     
-    # def plot_states_interactive(self)->None:
-        
-
-    #     fig = make_subplots(
-    #         rows=6, cols=2,
-    #         shared_xaxes=True,
-    #         vertical_spacing=0.03,    
-    #         column_widths=[0.7, 0.3],    
-
-    #         specs=[
-    #             [{"type": "xy"}, {"type": "scene", "rowspan": 6}],
-    #             [{"type": "xy"}, None],
-    #             [{"type": "xy"}, None],
-    #             [{"type": "xy"}, None],
-    #             [{"type": "xy"}, None],
-    #             [{"type": "xy"}, None],
-    #         ]
-    #     )
-        
-    #     doe = np.array(DebrisSwarm_1.doe)
-    #     ada1 = doe[:,0]
-    #     adl1 = doe[:,1]
-    #     ade1 = np.linalg.norm(doe[:, [2, 3]], axis=1)
-    #     simulation_times = np.array(simulation_times)
-    #     rewards = np.array(rewards)
-    #     controls = np.array(DebrisSwarm_1.controls_RTN)
-    #     R, T, N = controls[:,0], controls[:,1], controls[:,2]
-
-    #     fig.add_trace(go.Scatter(y=ada1, mode='lines'), row=1, col=1)
-    #     fig.update_yaxes(title_text=r"$a\delta a\ (m)$", row=1, col=1)
-
-    #     fig.add_trace(go.Scatter(y=adl1, mode='lines'), row=2, col=1)
-    #     fig.update_yaxes(title_text=r"$a\delta\lambda\ (m)$", row=2, col=1)
-
-    #     fig.add_trace(go.Scatter(y=ade1, mode='lines'), row=3, col=1)
-    #     fig.update_yaxes(title_text=r"$\|\!a\,\delta\mathbf e\|\ (m)$", row=3, col=1)
-
-    #     fig.add_trace(go.Scatter(x=simulation_times, y=rewards, mode='markers'), row=4, col=1)
-    #     fig.update_yaxes(title_text="Reward", row=4, col=1)
-
-    #     fig.add_trace(go.Scatter(y=R, mode='markers', name='Radial'), row=5, col=1)
-    #     fig.update_yaxes(title_text="$f_r$(mN)", row=5, col=1)
-
-    #     P_max = DebrisSwarm_1.p_max_predictions
-    #     fig.add_trace(go.Scatter(x=simulation_times,y=np.log(P_max), mode='markers', name='P^{max}_c'), row=6, col=1)
-    #     fig.update_yaxes(title_text=r"$\log(P^\text{c}_\text{max})$", row=6, col=1)
-
-    #     for t in simulation_times:
-    #         for r in range(1, 7):
-    #             fig.add_vline(
-    #                 x=t,
-    #                 row=r, col=1,          
-    #                 line_width=1,
-    #                 line_dash="dash",
-    #                 line_color="gray",
-    #                 opacity=0.5
-    #             )
-
-    #     fig.update_xaxes(title_text="Discrete Time", row=6, col=1)
-
-    #     for space_object in DebrisSwarm_1.primary_sat_and_debris_rvm:
-    #         coords = np.array(space_object)
-    #         fig.add_trace(
-    #             go.Scatter3d(
-    #                 x=coords[:,0],
-    #                 y=coords[:,1],
-    #                 z=coords[:,2],
-    #                 mode='markers',
-    #                 marker=dict(size=5)
-    #             ),
-    #             row=1, col=2
-    #         )
-
-    #     fig.update_layout(
-    #         scene=dict(
-    #             xaxis_title='X (km)',
-    #             yaxis_title='Y (km)',
-    #             zaxis_title='Z (km)',
-    #             aspectmode='auto'
-    #         ),
-    #         height=900,
-    #         width=1200,       
-    #         showlegend=False,
-    #         title_text=""
-    #     )
-
-    #     fig.show()
-
-        
-        
-    #     return
-
     
-
     def reset(self, 
               seed=None, 
               options=None
@@ -351,18 +258,15 @@ class RoeGym(gym.Env):
         
         self.current_episode_timestep = 0
         
-        Delta_kep = self._init_noise(D_kep_ranges=self.cfg.Delta_kep_ranges)
+        Droe_ranges = self.cfg.Droe_ranges
+        Droe = np.zeros(6)
         
         # Adjust RAAN and Inc
         if self.cfg.flag_man_type == "act":
-            d_inc = self.cfg.Delta_kep_ranges[2]
-            rand_inc_r = np.random.uniform(d_inc[0],d_inc[1])
+            Droe[4] = np.random.uniform(Droe_ranges[4][0],Droe_ranges[4][1])
+            Droe[5] = np.random.uniform(Droe_ranges[5][0],Droe_ranges[5][1])
             
-            ix_iy = random_vector_know_norm(2,rand_inc_r)
-            Delta_kep[2] = ix_iy[0]
-            Delta_kep[3] = ix_iy[1]
-            
-        self.sat1.set_initial_deviation(d_kep = Delta_kep)
+        self.sat1.set_initial_deviation(Droe = Droe)
         
         return self._observation_states(), None
 

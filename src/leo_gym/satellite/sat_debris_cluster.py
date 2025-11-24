@@ -122,9 +122,9 @@ class SatDebrisCluster():
             self.all_object_rvm0.append(pvm_col0.tolist())
 
             # Initialize secondary debris object covariance
-            self.C_rtn_s.append(np.array([[np.random.uniform(150,250)**2, 0, 0], 
-                                        [0, np.random.uniform(250,450)**2, 0],
-                                        [0, 0, np.random.uniform(150,250)**2]]))
+            self.C_rtn_s.append(np.array([[np.random.uniform(100,150)**2, 0, 0], 
+                                        [0, np.random.uniform(150,200)**2, 0],
+                                        [0, 0, np.random.uniform(100,150)**2]]))
             
             rv_p:np.ndarray = np.array(self.all_object_rvm0[0])
             rv_s:np.ndarray = np.array(self.all_object_rvm0[-1])
@@ -138,7 +138,7 @@ class SatDebrisCluster():
             self.C_eci_combined.append(C_eci_combined_individual)
             
             # self.radius_combined.append(100)
-            self.radius_combined.append(np.random.uniform(85, 145))
+            self.radius_combined.append(np.random.uniform(10, 50))
             
         return
 

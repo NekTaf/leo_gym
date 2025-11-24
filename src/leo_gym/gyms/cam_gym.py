@@ -129,14 +129,14 @@ class CamEnv(gym.Env):
                 
                 ## Min-Max scale to -/+2.5
                 C_min = np.array([
-                    [10**2 + 150**2, 0, 0],
-                    [0, 75**2 + 250**2, 0],
-                    [0, 0, 10**2 + 150**2]
+                    [10**2 + 50**2, 0, 0],
+                    [0, 50**2 + 50**2, 0],
+                    [0, 0, 10**2 + 50**2]
                 ])
                 C_max = np.array([
-                    [50**2 + 250**2, 0, 0],
-                    [0, 100**2 + 450**2, 0],
-                    [0, 0, 50**2 + 250**2]
+                    [10**2 + 100**2, 0, 0],
+                    [0, 50**2 + 150**2, 0],
+                    [0, 0, 10**2 + 100**2]
                 ])
 
 
@@ -166,18 +166,22 @@ class CamEnv(gym.Env):
                 inc_s = np.array([nsoe[4]]) # range 0 - 6 no need to normalize
                 raan_s = np.array([nsoe[5]]) # range 0 - 6 no need to normalize
 
-                obs_debris[i,:] = np.concatenate((l_s,inc_s,raan_s,
-                                                    tca_till,
-                                                    det_cov_scaled,
-                                                    combined_radius,
-                                                    p_max_at_tca), axis=0)
+                obs_debris[i,:] = np.concatenate((
+                    l_s,
+                    inc_s,
+                    raan_s,
+                    tca_till,
+                    det_cov_scaled,
+                    combined_radius,
+                    p_max_at_tca
+                    ), axis=0)
 
         obs_debris = np.array(obs_debris)
         
-        obs = {
-            "nds": obs_satellite,
-            "ds": obs_debris
-        }
+        # obs = {
+        #     "nds": obs_satellite,
+        #     "ds": obs_debris
+        # }
         
         obs = np.concatenate([obs_satellite.ravel(), obs_debris.ravel()], axis=0)
         
