@@ -135,7 +135,7 @@ class Satellite():
         Returns:
             Tuple[NDArray, NDArray, NDArray]: _description_
         """
-        return rv_2_roe_and_non_singular_oe(pv_sat, pv_ref)
+        return rv_to_roe_and_nsoe(pv_sat, pv_ref)
      
     def set_initial_deviation(self, 
                               Droe:NDArray

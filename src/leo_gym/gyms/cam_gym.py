@@ -41,8 +41,9 @@ class CamEnvConfig(BaseModel):
     adl_req: float = Field(..., ge=0, description="ADL requirement")
     ade_norm_req: float = Field(..., ge=0, description="ADE normalization")
     max_time_index: int = Field(..., ge=1, description="Max real time per episode")
-
+    
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+    
 
 
 class CamEnv(gym.Env):
@@ -52,7 +53,8 @@ class CamEnv(gym.Env):
     + Subscript _s denotes secondary debris objects
     + TCA stands for time of closest approach where collision happens 
     + For data, interact with SatDebrisCluster object containing satellite and debris data and propagation function
-    + Config function for object defining satellite and debris parameters is required, they are assumed to be identical in this example
+    + Config function for object defining satellite and debris parameters is 
+    required, they are assumed to be identical in this example
 
     """
 
@@ -88,7 +90,7 @@ class CamEnv(gym.Env):
                             )->NDArray[np.float64]:
         
         # Relative orbital elements between satellite and unperturbated trajectory
-        doe = np.array(self.DebrisSwarm_1.doe)
+        roe = np.array(self.DebrisSwarm_1.roe)
         
         # Primary satellite non_singular_oe
         non_singular_oe_p = np.array(self.DebrisSwarm_1.non_singular_oe[0:1])[:,-1, :].reshape(6,) 
@@ -96,21 +98,33 @@ class CamEnv(gym.Env):
         # Secondary debvris object values non_singular_oe
         non_singular_oe_s = np.array(self.DebrisSwarm_1.non_singular_oe[1:])[:,-1, :] 
  
-        adl = doe[-1][1]/1e3 # convert to km to normalize // range: 0 - -/+5
-        adex = doe[-1][2]/1e2 # convert to km to normalize // range: 0 - -/+ 9
-        adey = doe[-1][3]/1e2 # convert to km to normalize // range 0 - -/+ 9
+        adl = roe[-1][1]/1e3 # convert to km to normalize // range: 0 - -/+5
+        adex = roe[-1][2]/1e2 # convert to km to normalize // range: 0 - -/+ 9
+        adey = roe[-1][3]/1e2 # convert to km to normalize // range 0 - -/+ 9
         
         l_p = non_singular_oe_p[1] # range 0 - 6 no need to normalize
         inc_p = non_singular_oe_p[4] # range 0 - 6 no need to normalize
         raan_p = non_singular_oe_p[5] #range 0 - 6 no need to normalize
 
-        # Observations of primary satellite true and relative positions
-        obs_satellite = np.array((l_p,inc_p,raan_p,
-                                 adl,
-                                 adex, 
-                                 adey)).reshape(6,)
+        # Observations of primary satellite 
+        obs_satellite = np.array((
+            l_p,
+            inc_p,
+            raan_p,
+            adl,
+            adex, 
+            adey))
+        
+        obs_satellite_minimal = np.array([
+            l_p,
+            adl,
+            adex,
+            adey])        
 
-        obs_debris = np.zeros((1,7))
+        # Debris related observations
+        obs_debris = np.zeros((self.DebrisSwarm_1.no_debris,7))
+        obs_debris_minimal = np.zeros((self.DebrisSwarm_1.no_debris,2))
+        
         P_max_propagated = np.array(self.DebrisSwarm_1.metrics_at_tca)
 
         for i, (nsoe) in enumerate(non_singular_oe_s):
@@ -129,14 +143,20 @@ class CamEnv(gym.Env):
                 
                 ## Min-Max scale to -/+2.5
                 C_min = np.array([
-                    [10**2 + 50**2, 0, 0],
-                    [0, 50**2 + 50**2, 0],
-                    [0, 0, 10**2 + 50**2]
+                    [self.cfg.debris_cluster_config.C_rtn_s_ranges[0][0]**2 + \
+                        self.cfg.debris_cluster_config.C_rtn_p_ranges[0][0]**2, 0, 0],
+                    [0, self.cfg.debris_cluster_config.C_rtn_s_ranges[1][0]**2 +\
+                        self.cfg.debris_cluster_config.C_rtn_p_ranges[1][0]**2, 0],
+                    [0, 0, self.cfg.debris_cluster_config.C_rtn_s_ranges[2][0]**2 +\
+                        self.cfg.debris_cluster_config.C_rtn_p_ranges[2][0]**2]
                 ])
                 C_max = np.array([
-                    [10**2 + 100**2, 0, 0],
-                    [0, 50**2 + 150**2, 0],
-                    [0, 0, 10**2 + 100**2]
+                    [self.cfg.debris_cluster_config.C_rtn_s_ranges[0][1]**2 + \
+                        self.cfg.debris_cluster_config.C_rtn_p_ranges[0][1]**2, 0, 0],
+                    [0, self.cfg.debris_cluster_config.C_rtn_s_ranges[1][1]**2 +\
+                        self.cfg.debris_cluster_config.C_rtn_p_ranges[1][1]**2, 0],
+                    [0, 0, self.cfg.debris_cluster_config.C_rtn_s_ranges[2][1]**2 +\
+                        self.cfg.debris_cluster_config.C_rtn_p_ranges[2][1]**2]
                 ])
 
 
@@ -156,7 +176,8 @@ class CamEnv(gym.Env):
 
                 # Same for collision radius
                 combined_radius = self.DebrisSwarm_1.radius_combined[i]
-                combined_radius = 10 * (combined_radius - 85) / (145 - 85) - 5
+                combined_radius = 10 * (combined_radius - self.cfg.debris_cluster_config.radius_combined_ranges[0])\
+                    / (self.cfg.debris_cluster_config.radius_combined_ranges[1] - self.cfg.debris_cluster_config.radius_combined_ranges[0]) - 5
                 combined_radius = np.array([combined_radius]).reshape(1,)
                 
                 # Convert from minutes to hours
@@ -175,14 +196,14 @@ class CamEnv(gym.Env):
                     combined_radius,
                     p_max_at_tca
                     ), axis=0)
+                
+                obs_debris_minimal[i,:] = np.concatenate((
+                    tca_till,
+                    p_max_at_tca
+                    ), axis=0)
 
         obs_debris = np.array(obs_debris)
-        
-        # obs = {
-        #     "nds": obs_satellite,
-        #     "ds": obs_debris
-        # }
-        
+                        
         obs = np.concatenate([obs_satellite.ravel(), obs_debris.ravel()], axis=0)
         
         return obs
@@ -195,14 +216,14 @@ class CamEnv(gym.Env):
         terminated = False
         self.cost = 0
         
-        doe = np.array(self.DebrisSwarm_1.doe)
-        adl = doe[-1][1] # reference AOL
-        ade_vector = np.array([doe[-1][2],doe[-1][3]]) # reference ecc vector
+        roe = np.array(self.DebrisSwarm_1.roe)
+        adl = roe[-1][1] # reference AOL
+        ade_vector = np.array([roe[-1][2],roe[-1][3]]) # reference ecc vector
         ade = np.linalg.norm(ade_vector) # reference ecc norm             
         
         P_max_propagated = np.array(self.DebrisSwarm_1.metrics_at_tca)
         P_max_product = abs(1 - np.prod(1 - P_max_propagated[:,1]))        
-                
+
         # Recovery phase rewards
         if P_max_product == 0: #No more debris, P_max list empty
             if  ade<=self.cfg.ade_norm_req and abs(adl)<=self.cfg.adl_req:
@@ -244,6 +265,7 @@ class CamEnv(gym.Env):
                 
     def _discretize_action(self, 
                            action:int)->list:
+        
 
         dis_actions_list = [[0,0],
                             [0,+1], 
@@ -362,10 +384,10 @@ class CamEnv(gym.Env):
         
         rewards = self.rewards_plot_list
         
-        doe = np.array(self.DebrisSwarm_1.doe)
-        ada1 = doe[:,0]
-        adl1 = doe[:,1]
-        ade1 = np.linalg.norm(doe[:, [2, 3]], axis=1)
+        roe = np.array(self.DebrisSwarm_1.roe)
+        ada1 = roe[:,0]
+        adl1 = roe[:,1]
+        ade1 = np.linalg.norm(roe[:, [2, 3]], axis=1)
         simulation_times = np.array(simulation_times)
         rewards = np.array(rewards)
         controls = np.array(self.DebrisSwarm_1.controls_RTN)
@@ -387,7 +409,7 @@ class CamEnv(gym.Env):
         fig.update_yaxes(title_text="$f_r$(mN)", row=5, col=1)
 
         P_max = self.DebrisSwarm_1.p_max_predictions
-        fig.add_trace(go.Scatter(x=simulation_times,y=np.log(P_max), mode='markers', name='P^{max}_c'), row=6, col=1)
+        fig.add_trace(go.Scatter(x=simulation_times,y=np.log10(P_max), mode='markers', name='P^{max}_c'), row=6, col=1)
         fig.update_yaxes(title_text=r"$\log(P^\text{c}_\text{max})$", row=6, col=1)
 
         for t in simulation_times:

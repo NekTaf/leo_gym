@@ -27,24 +27,11 @@ from leo_gym.rl_algorithms.h_ppo.h_ppo_agent import Agent
 from leo_gym.gyms.cam_gym import CamEnv, CamEnvConfig
 from leo_gym.utils.utils import seed_all
 from train_cam_hppo_cfg import training_cfg, env_cfg, ppo_cfg
+import argparse
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
 
-# Seed run 
-SEED = 10
-seed_all(seed = SEED)
-
-enam = "cam_rl_journal"
-
-
-training_cfg = training_cfg.model_copy(
-    update={
-        "experiment_name": enam,
-        "seed": SEED,
-        "tracking_uri": "/home/nektaf/mlruns"
-    }
-)
 
 # Make environment 
 def make_env(env_cfg: CamEnvConfig, 
@@ -59,6 +46,26 @@ def make_env(env_cfg: CamEnvConfig,
 
 
 if __name__ == "__main__":
+    
+    p = argparse.ArgumentParser()
+    p.add_argument("--run_name", required=False, default=None)
+    p.add_argument("--seed", required=False, default=0)
+
+    args = p.parse_args()
+    
+    # Seed run 
+    SEED = int(args.seed)
+    seed_all(seed = SEED)
+
+    
+    training_cfg = training_cfg.model_copy(
+    update={
+        "seed": SEED,
+        "run_name":args.run_name
+    }
+)
+
+
     # Prepare vectorized environments
     SEEDS = [random.randint(0, 2**32 - 1) for _ in range(ppo_cfg.default_num_envs)]
     print("Seeds: ",SEEDS)

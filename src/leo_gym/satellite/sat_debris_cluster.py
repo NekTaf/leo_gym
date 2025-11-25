@@ -61,7 +61,13 @@ class SatDebrisClusterConfig(BaseModel):
                                                     description="[min, max] time window for conjunction checks",)
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
-
+    Droe_ranges: list = Field(..., description="ROE displacement ranges to sample \
+        from at start of simulation of size (6,2)")
+    
+    C_rtn_p_ranges: list = Field(..., description="Primary object rtn covariance ranges, list of size (3,2)")
+    C_rtn_s_ranges: list = Field(..., description="Secondary objects rtn covariance ranges, list of size (3,2)")
+    radius_combined_ranges: list = Field(..., description="Secondary and primary objects \
+        combine radius ranges\, list of size (3,2)")
 
 class SatDebrisCluster():
     def __init__(self,
@@ -75,34 +81,35 @@ class SatDebrisCluster():
         
     def DCM_eci2rtn(self,
                     r:NDArray,
-                    v:NDArray)->NDArray:
+                    v:NDArray
+                    )->NDArray:
         
         r = r.reshape(3,)
         v = v.reshape(3,)
         
         return self.dynamics1._DCM_eci2rtn(r,v)
 
-    def init_debris_objects(self
-                            )->None:
+    def init_debris_objects(self)->None:
         """Initialize debris objects
         """
-        
         # Initialize lists for parameter storage of each debris
-        self.conjuction_points_time:list[int] = []
-        self.C_rtn_s:list[np.ndarray] = []
-        self.C_eci_combined:list[np.ndarray] = []
-        self.radius_combined:list[float] = []
-        self.no_debris:int = 1
-        self.dt_col:int = 60
+        self.conjuction_points_time:list[int] = [] # conjuction time points in terms of discretized sim time (pointxdt) sec
+        self.C_rtn_s:list[np.ndarray] = [] # RTN covariance secondary objects (multiple debris)
+        self.C_eci_combined:list[np.ndarray] = [] # ECI covariance secondary and primary objects 
+        self.radius_combined:list[float] = [] # Combined radius
+        self.no_debris:int = 1 
+        self.dt_col:int = 60 # Simulation time for generating collisions (same as actual sim time in this case)
 
         if self.cfg.max_debris != 1:
             self.no_debris = np.random.randint(low=self.cfg.min_debris, high=self.cfg.max_debris+1, dtype=int)
 
         
         # Initialize primary satellite covariance
-        self.C_rtn_p:np.ndarray = np.array([[np.random.uniform(10,50)**2, 0, 0], 
-                                [0, np.random.uniform(75,100)**2, 0],
-                                [0, 0, np.random.uniform(10,50)**2]])
+        self.C_rtn_p:np.ndarray = np.array([
+            [np.random.uniform(self.cfg.C_rtn_s_ranges[0][0],self.cfg.C_rtn_s_ranges[0][1])**2, 0, 0], 
+            [0, np.random.uniform(self.cfg.C_rtn_s_ranges[1][0],self.cfg.C_rtn_s_ranges[1][1])**2, 0],
+            [0, 0, np.random.uniform(self.cfg.C_rtn_s_ranges[2][0],self.cfg.C_rtn_s_ranges[2][1])**2]
+            ])
 
         
         for i in range(self.no_debris):
@@ -122,9 +129,12 @@ class SatDebrisCluster():
             self.all_object_rvm0.append(pvm_col0.tolist())
 
             # Initialize secondary debris object covariance
-            self.C_rtn_s.append(np.array([[np.random.uniform(100,150)**2, 0, 0], 
-                                        [0, np.random.uniform(150,200)**2, 0],
-                                        [0, 0, np.random.uniform(100,150)**2]]))
+            self.C_rtn_s.append(
+                np.array([
+                    [np.random.uniform(self.cfg.C_rtn_s_ranges[0][0],self.cfg.C_rtn_s_ranges[0][1])**2, 0, 0], 
+                    [0, np.random.uniform(self.cfg.C_rtn_s_ranges[1][0],self.cfg.C_rtn_s_ranges[1][1])**2, 0],
+                    [0, 0, np.random.uniform(self.cfg.C_rtn_s_ranges[2][0],self.cfg.C_rtn_s_ranges[2][1])**2]
+                ]))
             
             rv_p:np.ndarray = np.array(self.all_object_rvm0[0])
             rv_s:np.ndarray = np.array(self.all_object_rvm0[-1])
@@ -138,18 +148,48 @@ class SatDebrisCluster():
             self.C_eci_combined.append(C_eci_combined_individual)
             
             # self.radius_combined.append(100)
-            self.radius_combined.append(np.random.uniform(10, 50))
+            self.radius_combined.append(np.random.uniform(
+                self.cfg.radius_combined_ranges[0], 
+                self.cfg.radius_combined_ranges[1]))
             
         return
 
     def init_ideal_traj(self
                         )->None:
-        """Calculate relative orbital elements for station keeping
+        """initialize satellite starting point.
+        
+        Droe_ranges ads a displacement relative to the starting trajectory point
+        expressed in terms of relative orbital elements. 
         """
+        
+        self.cfg.Droe_ranges
+        
+        Dadl = np.random.uniform(
+            low=self.cfg.Droe_ranges[1][0],
+            high=self.cfg.Droe_ranges[1][1])
+        
+        Dadex = np.random.uniform(
+            low=self.cfg.Droe_ranges[2][0], 
+            high=self.cfg.Droe_ranges[2][1])
+        
+        Dadey = np.random.uniform(
+            low=self.cfg.Droe_ranges[3][0],
+            high=self.cfg.Droe_ranges[3][1])
+        
         self.ideal_traj_rvm.append(self.all_object_rvm0[0]) 
-        doe, oe, _ = rv_2_roe_and_non_singular_oe(np.array(self.all_object_rvm0[0][:6]), 
-                                            np.array(self.ideal_traj_rvm[-1][:6]))
-        self.doe.append(doe)
+        
+        rv0_displaced = Delta_roe_to_rv(
+            Droe=[0,Dadl,Dadex,Dadey,0,0],
+            rv_ref=self.ideal_traj_rvm[0][:6]) 
+
+        # rewrite initial position of primary satellite to the displaced one
+        self.all_object_rvm0[0] = rv0_displaced.tolist()+[self.all_object_rvm0[0][6]]
+
+        roe, oe, _ = rv_to_roe_and_nsoe(
+            rv_c=np.array(self.ideal_traj_rvm[0][:6]), 
+            rv_d=np.array(self.all_object_rvm0[0][:6]))
+        
+        self.roe.append(roe)
         self.oe_ns.append(oe)
         
         return
@@ -157,39 +197,41 @@ class SatDebrisCluster():
     def calculate_non_singular_oe(self, 
                                   rv:NDArray
                                   )-> NDArray:
-        """Calculates non singular orbital elements for circular orbits
+        """
+        Calculate non-singular orbital elements for circular orbits.
 
-        Args:
-            rv (arr): size (6,), rv posiiton velocity in ECI 
-
-        Returns:
-            arr: (6,) oe_ns (a, AOL, e_x, e_y, i, RAAN), Non-singular orbital elements for non-defined eccentricity in circular orbits
+        :param rv: Position and velocity vector in the ECI frame (arr of shape (6,))
+        :return: Non-singular orbital elements (arr of shape (6,)) 
+                (a, AOL, e_x, e_y, i, \Omega), suitable for circular orbits 
+                where eccentricity is not defined.
         """
                 
         rv = np.array(rv)
         
-        oe_kep = vector_to_classical_elements(r_bn_n=rv[:3], 
-                                            v_bn_n=rv[-3:], 
-                                            planet = 'earth')
+        oe_kep = vector_to_classical_elements(
+            r_bn_n=rv[:3], 
+            v_bn_n=rv[-3:], 
+            planet = 'earth')
         
-        oe_ns = classical_to_non_singular_elements(semi_major_axis=oe_kep[0],
-                                                    eccentricity=oe_kep[1],
-                                                    inclination=oe_kep[2],
-                                                    right_ascension=oe_kep[3],
-                                                    argument_of_periapsis=oe_kep[4],
-                                                    true_anomaly=oe_kep[5])
+        oe_ns = classical_to_non_singular_elements(
+            semi_major_axis=oe_kep[0],
+            eccentricity=oe_kep[1],
+            inclination=oe_kep[2],
+            right_ascension=oe_kep[3],
+            argument_of_periapsis=oe_kep[4],
+            true_anomaly=oe_kep[5])
         
-        oe_ns = np.array([oe_ns[0],
-                        oe_ns[5],
-                        oe_ns[1],
-                        oe_ns[2],
-                        oe_ns[3],
-                        oe_ns[4]]).reshape(6,)
+        oe_ns = np.array([
+            oe_ns[0],
+            oe_ns[5],
+            oe_ns[1],
+            oe_ns[2],
+            oe_ns[3],
+            oe_ns[4]]).reshape(6,)
 
         return oe_ns
    
-    def get_projected_collision_metrics(self
-                        )->list[NDArray]:
+    def get_projected_collision_metrics(self)->list[NDArray]:
         """Propagate to TCA and return P_c max for each debris
         """
         primary_rvm:list[NDArray] = []        # Dummy variable, do not append to main 
@@ -217,10 +259,11 @@ class SatDebrisCluster():
                     continue
                 
                 for _ in range(time_till_conjuction_time):    
-                    rvm = self.dynamics1.propagate(x=np.array(rvm),
-                                                    u=u,
-                                                    t=self.t[self.n],
-                                                    dt=self.cfg.dt)
+                    rvm = self.dynamics1.propagate(
+                        x=np.array(rvm),
+                        u=u,
+                        t=self.t[self.n],
+                        dt=self.cfg.dt)
                     
                 primary_rvm_at_tca = primary_rvm[time_till_conjuction_time][:6]
                 
@@ -233,14 +276,16 @@ class SatDebrisCluster():
                 delta_r = np.array(object_bplane[:3])
                                     
                 # Get combined covariance
-                C_b_combined, C_eci_combined_individual = covariance_converisions(rv_p=rv_p,
-                                                    rv_s=rv_s,
-                                                    C_rtn_p=self.C_rtn_p,
-                                                    C_rtn_s=self.C_rtn_s[i-1])
+                C_b_combined, _ = covariance_converisions(
+                    rv_p=rv_p,
+                    rv_s=rv_s,
+                    C_rtn_p=self.C_rtn_p,
+                    C_rtn_s=self.C_rtn_s[i-1])
                 
-                object_collision_metrics.append(collision_metrics(delta_r_b=delta_r, 
-                                                                l=self.radius_combined[i-1], 
-                                                                cov_b=C_b_combined))
+                object_collision_metrics.append(collision_metrics(
+                    delta_r_b=delta_r, 
+                    l=self.radius_combined[i-1], 
+                    cov_b=C_b_combined))
                 
         return object_collision_metrics
         
@@ -250,24 +295,28 @@ class SatDebrisCluster():
                 
         self.C_eci_combined = []
         
-        for i, (object_rvm,object_mahala,object_bplane,nsoe) in enumerate(zip(self.primary_sat_and_debris_rvm,
-                                             self.primary_sat_and_debris_mahala,
-                                             self.primary_sat_and_debris_b_plane,
-                                             self.non_singular_oe)):
+        for i, (object_rvm,object_mahala,object_bplane,nsoe) in enumerate(
+            zip(self.primary_sat_and_debris_rvm,
+                self.primary_sat_and_debris_mahala,
+                self.primary_sat_and_debris_b_plane,
+                self.non_singular_oe)):
             
             # Apply control only to primary satellite
             if i != 0:  
                 u = np.zeros(3) 
             
             # Objects rvm in ECI
-            object_rvm.append(self.dynamics1.propagate(x=np.array(object_rvm[-1]),
-                                                       u=u,t=self.t[self.n],dt=self.cfg.dt))  
+            object_rvm.append(self.dynamics1.propagate(
+                x=np.array(object_rvm[-1]),
+                u=u,t=self.t[self.n],dt=self.cfg.dt))  
+            
             rv_p = np.array(self.primary_sat_and_debris_rvm[0][-1][:6]).reshape(-1) #primary satellite rvm
             rv_s = np.array(object_rvm[-1][:6]).reshape(-1) #secondary object rvm
 
             # Object bplane params
-            object_bplane.append(delta_r_eci_2_rb(np.array(self.primary_sat_and_debris_rvm[0][-1][:6]).reshape(-1)
-                                                    ,np.array(object_rvm[-1][:6]).reshape(-1)))
+            object_bplane.append(delta_r_eci_2_rb(
+                np.array(self.primary_sat_and_debris_rvm[0][-1][:6]).reshape(-1),
+                np.array(object_rvm[-1][:6]).reshape(-1)))
             
             # Secondary debris object non-singular params
             oe_non_singular = self.calculate_non_singular_oe(rv=rv_s)
@@ -278,19 +327,21 @@ class SatDebrisCluster():
             
             if i != 0:
                 # Get combined covariance
-                C_b_combined, C_eci_combined_individual = covariance_converisions(rv_p=rv_p,
-                                                    rv_s=rv_s,
-                                                    C_rtn_p=self.C_rtn_p,
-                                                    C_rtn_s=self.C_rtn_s[i-1])
+                C_b_combined, C_eci_combined_individual = covariance_converisions(
+                    rv_p=rv_p,
+                    rv_s=rv_s,
+                    C_rtn_p=self.C_rtn_p,
+                    C_rtn_s=self.C_rtn_s[i-1])
                 
                 self.C_eci_combined.append(C_eci_combined_individual)
                 
                 if np.isnan(delta_r_b).any():
                     object_mahala.append(np.zeros(5))
                 else:
-                    object_mahala.append(collision_metrics(delta_r_b=delta_r_b, 
-                                                                    l=self.radius_combined[i-1], 
-                                                                    cov_b=C_b_combined))
+                    object_mahala.append(collision_metrics(
+                        delta_r_b=delta_r_b, 
+                        l=self.radius_combined[i-1], 
+                        cov_b=C_b_combined))
 
             # Save only satellite thrust commands 
             if i == 0:
@@ -302,9 +353,9 @@ class SatDebrisCluster():
                                                                  t=self.t[self.n],
                                                                  dt=self.cfg.dt))             
 
-        doe, oe, oe_ref = rv_2_roe_and_non_singular_oe(np.array(self.primary_sat_and_debris_rvm[0][-1][:6]), 
+        roe, oe, oe_ref = rv_to_roe_and_nsoe(np.array(self.primary_sat_and_debris_rvm[0][-1][:6]), 
                                             np.array(self.ideal_traj_rvm[-1][:6]))
-        self.doe.append(doe)
+        self.roe.append(roe)
         self.oe_ns.append(oe)
         
         # Update index
@@ -312,8 +363,7 @@ class SatDebrisCluster():
         
         return
 
-    def propagate_2_tca(self
-                          )->None:
+    def propagate_2_tca(self)->None:
         """Propagate after maneuvers to evaluate TCA collision probability
         """
 
@@ -325,7 +375,7 @@ class SatDebrisCluster():
 
             if P_max_product < 0:
                 P_max_product = 0
-                
+            
             self.p_max_predictions.append(P_max_product)
             self.delta_r_b_plane.append(np.array([metrics_at_tca[:,3],
                                                   metrics_at_tca[:,4]]))
@@ -336,8 +386,7 @@ class SatDebrisCluster():
         
         return
                                            
-    def apply_manplan(self, 
-                      manplan:list)->None:
+    def apply_manplan(self, manplan:list)->None:
         """Applies manuever plan and updates satellite and debris object positions 
 
         Args:
@@ -379,8 +428,7 @@ class SatDebrisCluster():
         self.propagate_2_tca()
         
     
-    def plot_projected_position_bplane(self,
-                            save_path:str=None)->None:
+    def plot_projected_position_bplane(self, save_path:str=None)->None:
     
         data = np.array(self.delta_r_b_plane).squeeze()
 
@@ -416,31 +464,25 @@ class SatDebrisCluster():
     
         return
 
-    def plot_doe_states(self,
-                    save_path:str)->None:
-        
-        
-        
-        
+    def plot_roe_states(self, save_path:str)->None:
         
         return
     
-    def reset_states(self
-                     )->None:
+    def reset_states(self)->None:
         
         self.n:int = 0 #discrete time index 
         self.traj_len:int = int(self.cfg.days*24*60*60/(np.sign(self.cfg.dt)*self.cfg.dt)) # discrete trajectory time length
         self.t:np.ndarray = np.linspace(0, self.traj_len * np.sign(self.cfg.dt)*self.cfg.dt, self.traj_len + 1) # time array for whole simulation
 
-        self.all_object_rvm0:list = []
-        self.ideal_traj_rvm:list = []
-        self.doe:list = []
-        self.oe_ns:list = []
-        self.p_max_predictions:list = []
-        self.delta_r_b_plane:list = []
-        self.controls_RTN:list = []
-        self.manplans:list = []
-        self.manaplan_call_relative_time:list = []
+        self.all_object_rvm0:list = [] # position velocity mass starting for primary plus debirs
+        self.ideal_traj_rvm:list = [] # Ideal trajectory position velocity mass
+        self.roe:list = [] # Relative orbital elements primary-reference trajectory 
+        self.oe_ns:list = [] # non-singular orbital elements of all objects
+        self.p_max_predictions:list = [] # Maximum collision probabilities
+        self.delta_r_b_plane:list = [] # Collision distance on the B-plane
+        self.controls_RTN:list = [] # Thrusts in RTN frame each simulation timestep  
+        self.manplans:list = [] # Maneuver plans used
+        self.manaplan_call_relative_time:list = [] # Maneuver plan starting times at relative to start of simulaiton (stepxdt sec)
         # For evaluating P_c max at TCA
         self.metrics_at_tca:list = []
 
@@ -492,11 +534,7 @@ class SatDebrisCluster():
         
         """collect all important data of object and save in csv files
         """
-        
-        
-        
-        
-        
+                
         rvm_cols    = ['$r_x$','$r_y$', '$r_z$', 
                        '$v_x$','$v_y$', '$v_z$', '$m$']
         
@@ -505,7 +543,7 @@ class SatDebrisCluster():
         relative_cart_cols  = ['$\delta r_x$','$\delta r_y$', '\delta $r_z$', 
                        '$ \delta v_x$','$\delta v_y$', '$\delta v_z$']
         
-        doe_cols    = ['$a\delta a$','$a \delta \lambda$', 
+        roe_cols    = ['$a\delta a$','$a \delta \lambda$', 
                        '$a\delta e_x$', '$a\delta e_y$',
                        '$a\delta i_x$', '$a\delta i_y$']
                 
@@ -517,16 +555,16 @@ class SatDebrisCluster():
         thrust_rtn = np.array(self.controls_RTN)
         p_max_predictions = np.array(self.p_max_predictions)
         delta_r_b_plane = np.array(self.delta_r_b_plane)
-        doe = np.array(self.doe)
+        roe = np.array(self.roe)
         primary_sat_and_debris_rvm = np.array(self.primary_sat_and_debris_rvm)
         oe_ns = np.array(self.oe_ns)
 
         pd.DataFrame(thrust_rtn).to_csv(os.path.join(path,'thrust_rtn.csv'), index=False, header=thrust_cols)
         pd.DataFrame(p_max_predictions).to_csv(os.path.join(path,'p_max_predictions.csv'), index=False, header=False)
         pd.DataFrame(delta_r_b_plane.squeeze()).to_csv(os.path.join(path,'delta_r_b_plane.csv'), index=False, header=False)
-        pd.DataFrame(doe).to_csv(os.path.join(path,'doe.csv'), index=False, header=doe_cols)
+        pd.DataFrame(roe).to_csv(os.path.join(path,'roe.csv'), index=False, header=roe_cols)
         pd.DataFrame(self.conjuction_points_time).to_csv(os.path.join(path,'conjuction_points_time.csv'), index=False, header=False)
-        pd.DataFrame(doe).to_csv(os.path.join(path,'doe.csv'), index=False, header=doe_cols)
+        pd.DataFrame(roe).to_csv(os.path.join(path,'roe.csv'), index=False, header=roe_cols)
         pd.DataFrame(oe_ns).to_csv(os.path.join(path,'oe_ns.csv'), index=False, header=oe_ns_cols)
         pd.DataFrame(self.manaplan_call_relative_time).to_csv(os.path.join(path,'manaplan_call_relative_time.csv'), index=False, header=False)
 

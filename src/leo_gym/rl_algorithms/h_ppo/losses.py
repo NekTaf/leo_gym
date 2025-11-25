@@ -19,13 +19,13 @@ class LossComponent(ABC):
 
 
 class ActorLoss(LossComponent):
-
     def __init__(self, 
-                 policy_net, 
+                 policy_net: T.nn.Module, 
                  policy_clip: float, 
                  log_ent_coef: nn.Parameter, 
-                 target_kl: float):
-        
+                 target_kl: float)-> None:
+        super().__init__()
+
         self.policy_net = policy_net
         self.policy_clip = policy_clip
         self.log_ent_coef = log_ent_coef
@@ -101,8 +101,8 @@ class ActorLoss(LossComponent):
         }
 
 class CriticLoss(LossComponent):
-
-    def __init__(self, value_net, policy_clip: float):
+    def __init__(self, value_net:T.nn.Module, policy_clip: float)-> None:
+        super().__init__()
         self.value_net = value_net
         self.policy_clip = policy_clip
 

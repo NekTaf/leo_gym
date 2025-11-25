@@ -120,6 +120,7 @@ class ValueNetwork(nn.Module):
                  nn_size=256,
                  name='valuenet'):
         super().__init__()
+        
         self.device = device
         self.name = name
 

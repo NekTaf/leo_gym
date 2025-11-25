@@ -9,11 +9,33 @@ from zendir.maths.astro import (
     classical_to_non_singular_elements,
     vector_to_classical_elements,
     vector_to_relative_elements_mean,
-    classical_to_vector_elements
+    classical_to_vector_elements,
+    classical_to_relative_elements_mean
 )
 
 
-def rv_2_roe_and_non_singular_oe(
+
+def minpipi(x):
+    """
+    Wrap angle(s) to the range (-π, π].
+
+    :param x: Angle or array of angles in radians.
+    :return: Wrapped angle(s) in radians.
+    """
+    x = np.mod(x + np.pi, 2 * np.pi) - np.pi
+    return x
+
+def zero2twopi(x):
+    """
+    Wrap angle(s) to the range [0, 2π).
+
+    :param x: Angle or array of angles in radians.
+    :return: Wrapped angle(s) in radians.
+    """
+    return np.mod(x, 2 * np.pi)
+
+
+def rv_to_roe_and_nsoe(
     rv_d: NDArray,
     rv_c: NDArray
     ) -> Tuple[NDArray, 
@@ -36,6 +58,9 @@ def rv_2_roe_and_non_singular_oe(
         r_bn_n=rv_d[:3],
         v_bn_n=rv_d[-3:],
         planet="earth")
+    
+    oe_kep = np.array(oe_kep).reshape(6,)
+
     
     oe_ns = classical_to_non_singular_elements(
         semi_major_axis=oe_kep[0],
@@ -75,16 +100,34 @@ def rv_2_roe_and_non_singular_oe(
         ).reshape(6,)
     
     oe_kep_r = np.array(oe_kep_r).reshape(6,)
-
-
-    roe = vector_to_relative_elements_mean(
-        r_bn_n_leader=rv_c[:3],
-        r_bn_n_follower=rv_d[:3],
-        v_bn_n_leader=rv_c[-3:],
-        v_bn_n_follower=rv_d[-3:])   
     
+    oe_kep_r[2] = zero2twopi(oe_kep_r[2])
+    oe_kep_r[3] = zero2twopi(oe_kep_r[3])
+    oe_kep_r[4] = zero2twopi(oe_kep_r[4])
+    oe_kep_r[5] = zero2twopi(oe_kep_r[5])
+
+    oe_kep[2] = zero2twopi(oe_kep[2])
+    oe_kep[3] = zero2twopi(oe_kep[3])
+    oe_kep[4] = zero2twopi(oe_kep[4])
+    oe_kep[5] = zero2twopi(oe_kep[5])
+    
+    roe = classical_to_relative_elements_mean(
+        semi_major_axis_leader=oe_kep_r[0],
+        eccentricity_leader=oe_kep_r[1],
+        inclination_leader=oe_kep_r[2],
+        right_ascension_leader=oe_kep_r[3],
+        argument_of_periapsis_leader=oe_kep_r[4],
+        true_anomaly_leader=oe_kep_r[5],
+        
+        semi_major_axis_follower=oe_kep[0],
+        eccentricity_follower=oe_kep[1],
+        inclination_follower=oe_kep[2],
+        right_ascension_follower=oe_kep[3],
+        argument_of_periapsis_follower=oe_kep[4],
+        true_anomaly_follower=oe_kep[5],
+        )
+        
     roe = np.array(roe).reshape(6,)
-    
     roe = np.array(([roe[0],roe[5],roe[1],roe[4],roe[2],roe[3]])).reshape(6,)
                 
     return roe, oe_ns, oe_ns_r
@@ -254,9 +297,6 @@ def osc_2_mean_non_singular_oe_brouwer_lyddane_method(oe:NDArray,
         
     return oeMean
 
-def minpipi(x):
-    x = np.mod(x + np.pi, 2 * np.pi) - np.pi
-    return x
 
 def damico_relative_elements(
     oe_r:NDArray,
@@ -527,7 +567,7 @@ def Delta_roe_to_rv(
         oe_ns_ref[3],
         oe_ns_ref[4]]).reshape(6,)
 
-    oe_ns_real = oe_ns_ref + Droe/oe_ns_ref[0]
+    oe_ns_real = oe_ns_ref - Droe/oe_ns_ref[0]
     
     
     oe_real = nonsingular_to_classical_oe(semi_major_axis=oe_ns_real[0],
@@ -545,7 +585,7 @@ def Delta_roe_to_rv(
         argument_of_periapsis=oe_real[4],
         true_anomaly=oe_real[6])
     
-    rv = np.array(rv)
+    rv = np.array(rv).reshape(6,)
         
     return rv
 

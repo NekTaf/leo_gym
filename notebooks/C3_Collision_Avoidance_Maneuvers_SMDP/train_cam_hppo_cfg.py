@@ -47,12 +47,12 @@ from leo_gym.rl_algorithms.h_ppo.actor_critic_nets import (
 
 # ===== Environment configurations =====
 env_cfg = CamEnvConfig(
-    high_action=[15, 15],
-    low_action=[0, 0],
+    high_action=[55, 41],
+    low_action=[9, 1],
     max_time_index=1300,
     p_max_limit=1e-3,
     adl_req=400,
-    ade_norm_req=100,
+    ade_norm_req=75,
     debris_cluster_config=SatDebrisClusterConfig(
         params_dyn=DynamicsConfig(
             flag_rtn_thrust=True,
@@ -94,7 +94,31 @@ env_cfg = CamEnvConfig(
         dt=60,
         max_debris=1,
         min_debris=1,
-        conjunction_time_window_index=[550, 800]
+        conjunction_time_window_index=[650, 800],
+        Droe_ranges=[
+            [0,0], #ada
+            # [-1500,+1500], #adl
+            # [-300,+300], #adex
+            # [-300,+300], #adey
+            [0,0], #adl
+            [0,0], #adex
+            [0,0], #adey
+            [0,0], #adix
+            [0,0] #adiy
+        ],
+        C_rtn_s_ranges = [
+            [100,150],
+            [150,200],
+            [100,150]
+        ],
+        
+        C_rtn_p_ranges = [
+            [10,50],
+            [75,100],
+            [10,50]
+        ],
+
+        radius_combined_ranges=[10,100],
     ),
 )
 
@@ -124,7 +148,7 @@ ppo_cfg = PPOConfig(
     default_num_envs=100, 
     steps_per_env=70,
     save_nets_period=int(1e5),
-    max_training_timesteps=int(15e6),
+    max_training_timesteps=int(7e6),
     trained_algorithm_config_path = None
 
 )
@@ -138,7 +162,7 @@ class TrainingConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 training_cfg = TrainingConfig(
-    tracking_uri=None,
-    experiment_name=None,
-    run_name=None,
+    tracking_uri="/home/nektaf/mlruns",
+    experiment_name="cam_shap_journal_2",
+    run_name= None,
 )

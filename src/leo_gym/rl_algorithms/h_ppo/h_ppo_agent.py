@@ -1,5 +1,5 @@
 # Standard library
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 from dataclasses import asdict
 
 # Third-party
@@ -9,6 +9,7 @@ import torch as T
 import torch.nn as nn
 import mlflow
 import os
+from numpy.typing import NDArray
 
 from tqdm import tqdm
 # Local
@@ -110,11 +111,16 @@ class Agent:
 
 
     def choose_action(self, 
-                      state: dict,
-                      deterministic:Optional[bool]=False):
+                      state: Any,
+                      deterministic:Optional[bool]=False
+                      )-> Tuple[NDArray,NDArray,NDArray,NDArray,NDArray]:
         """
-        Given a state dict, return:
-          (action_dis, action_cont, logp_dis, logp_cont, value)
+        Get discrete and continuous action with probabilities and value function output 
+        
+        :param state: policy observation
+        :param deterministic: wether the policy should sample actions or not
+        
+        :return: (action_dis, action_cont, logp_dis, logp_cont, value)
         """
         dist_dis, dist_cont = self.policy_net(state)
         value = T.squeeze(self.value_net(state)).detach().cpu().numpy()
@@ -173,7 +179,8 @@ class Agent:
                 dones_arr,
                 t_soujourn_arr,        
                 gae_lambda=None,
-                gamma=None):
+                gamma=None
+                )->T.Tensor:
 
         # Custom gamma-unused
         if gae_lambda is None:
@@ -445,7 +452,7 @@ class Agent:
                                 training_cfg.tracking_uri,
                                 experiment_id,
                                 run_id,
-                                "models",
+                                "artifacts/models",
                                 f"{self.timesteps_so_far}"
                             )
                             
@@ -461,7 +468,7 @@ class Agent:
             training_cfg.tracking_uri,
             experiment_id,
             run_id,
-            "artifacts",
+            "artifacts/models",
             "final"
         )
         
