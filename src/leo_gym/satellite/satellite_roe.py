@@ -187,7 +187,7 @@ class Satellite():
 
         manplan_total = np.zeros((dt_delay+dt_duration+dt_coast,3))
 
-        # Map maneuver flag to RTN axis. Support both legacy alt/act and R/T/N.
+        # Map maneuver flag to RTN axis. Support R/T/N.
         axis_map = {
             "R":   np.array([1, 0, 0]),
             "T":   np.array([0, 1, 0]),
