@@ -314,7 +314,7 @@ class Satellite():
         axes[2].set_ylabel('Eccentricity')
 
         axes[3].plot(x, T_thrust)
-        axes[3].set_ylabel('Tang. Thrust - (N)')
+        axes[3].set_ylabel('Thrust - (N)')
 
         axes[4].plot(x, massloss)
         axes[4].set_ylabel('Mass (Kg)')
@@ -356,7 +356,7 @@ class Satellite():
                 go.Scatter(x=x, y=data_list, mode='lines', name=label),
                 row=idx, col=1
             )
-            fig.update_xaxes(title_text='Sample Index', row=idx, col=1, title_font=dict(size=fontsize_axes))
+            fig.update_xaxes(title_text='Days', row=idx, col=1, title_font=dict(size=fontsize_axes))
             fig.update_yaxes(title_text=label, row=idx, col=1, title_font=dict(size=fontsize_axes))
 
         fig.update_layout(
