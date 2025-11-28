@@ -237,8 +237,19 @@ class RecfgEnv(gym.Env):
         # Keep the reference trajectory and only reset the perturbed track
         self.satellite.reset_sat_states(keep_ref_trajectory=True)
 
+        Droe_ranges = self.cfg.Droe_ranges
+        Droe = np.zeros(6, dtype=np.float64)
+        
+        Droe[0] = np.random.uniform(Droe_ranges[0][0], Droe_ranges[0][1])  # ada
+        Droe[1] = np.random.uniform(Droe_ranges[1][0], Droe_ranges[1][1])  # adl
+        Droe[2] = np.random.uniform(Droe_ranges[2][0], Droe_ranges[2][1])  # adex  
+        Droe[3] = np.random.uniform(Droe_ranges[3][0], Droe_ranges[3][1])  # adey
+        Droe[4] = np.random.uniform(Droe_ranges[4][0], Droe_ranges[4][1])  # adix
+        Droe[5] = np.random.uniform(Droe_ranges[5][0], Droe_ranges[5][1])  # adiy
+        
+        
         # Small default deviation keeps observations informative at t=0
-        self.satellite.set_initial_deviation(self.cfg.Droe_ranges) # type: ignore
+        self.satellite.set_initial_deviation(Droe) # type: ignore
 
         self.rewards_plot_list = []
         self.n_plot_list = []

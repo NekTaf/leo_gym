@@ -78,7 +78,12 @@ env_cfg = RecfgEnvConfig(
     discrete_actions_size=7,  # R/T/N with +/- and coast
     f_max=sat_cfg.pert_traj_params.f_max,
     max_time_index=int(24 * sat_cfg.days * 60 * 60 / sat_cfg.dt),
-    Droe_ranges=[0, 0, 0, 0, -600, 0],
+    Droe_ranges=[[0,0],
+                [0,0],
+                [0.0,0.0],
+                [0.0,0.0], 
+                [-800, +800],
+                [-800,+800]],
     target_roe=None,
     target_tolerance=25.0,
     reward_distance_scale=1e4,
