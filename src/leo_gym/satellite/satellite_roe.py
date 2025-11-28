@@ -192,6 +192,8 @@ class Satellite():
             "R":   np.array([1, 0, 0]),
             "T":   np.array([0, 1, 0]),
             "N":   np.array([0, 0, 1]),
+            "alt": np.array([0, 1, 0]),
+            "act": np.array([0, 0, 1])
         }
         thrust_vec = axis_map.get(flag_man_type, np.zeros(3))
 
@@ -325,7 +327,6 @@ class Satellite():
         return
     
     def plot_states_interactive(self)->None:
-        
 
         x = np.arange(len(self.roe)) * (self.cfg.dt / 86400.0)
 
@@ -349,7 +350,7 @@ class Satellite():
         num_plots = len(signals)
 
         fig = sp.make_subplots(rows=num_plots, cols=1)
-        fontsize_axes = 12
+        fontsize_axes = 15
 
         for idx, (data_list, label) in enumerate(signals, start=1):
             fig.add_trace(
