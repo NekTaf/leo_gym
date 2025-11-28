@@ -294,42 +294,33 @@ def list_2_txt(list:list,
     return 
 
 
-def random_vector_know_norm(k:int,
-                          norm:float
-                          )->np.ndarray:
-    
-    """Find a vector size k, with a know final norm
-    
-    Inputs:
-        k (int): desired vector size 
-        norm (float): desired norm 
-
-    Returns:
-        (NDArray[np.float64]): output array (k,)
-        
-        
-    Generates the vector value sfrom a multinomial dirichlet distribution
-    
-    https://en.wikipedia.org/wiki/Dirichlet_distribution
+def random_vector_know_norm(k: int, norm: float) -> np.ndarray:
     """
-    
-    flag_1 = False
-    
-    if norm<1:
-        norm*=1e3
-        flag_1 = True
-        
-    norm = norm**2
-    
-    weights = np.random.dirichlet(np.ones(k))  
+    Generate a random vector of size k with a given final norm.
+    Avoids multinomial (which overflows on Windows).
+    """
 
-    v = np.random.multinomial(norm, weights)
-    v = np.sqrt(v) * np.random.choice([-1,1], size=k)
-    
+    flag_1 = False
+    if norm < 1:
+        norm *= 1e3
+        flag_1 = True
+
+    total_power = norm**2
+
+    # Dirichlet proportions
+    weights = np.random.dirichlet(np.ones(k))
+
+    # Scale directly instead of multinomial
+    v = weights * total_power
+
+    # Signs and sqrt
+    v = np.sqrt(v) * np.random.choice([-1, 1], size=k)
+
     if flag_1:
-        v=v/1e3
-    
-    return v   
+        v = v / 1e3
+
+    return v
+ 
 
 
 

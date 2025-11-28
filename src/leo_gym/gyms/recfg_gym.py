@@ -42,6 +42,7 @@ class RecfgEnvConfig(BaseModel):
     f_max: float = Field(1.0, gt=0, description="Maximum thrust magnitude (N)")
     max_time_index: int = Field(1440, ge=1, description="Episode length in simulator steps")
 
+    Droe_ranges: list # Delta([ada, adl, adex, adey, adix, adiy]) Initial ROE deviation ranges for reset
     target_roe: Optional[Any] = Field(
         None, description="Desired ROE vector. Defaults to zeros (match the reference orbit)."
     )
@@ -66,6 +67,15 @@ class RecfgEnv(gym.Env):
         super().__init__()
         seed_all(seed)
         self.cfg = cfg
+        
+        self.satellite = Satellite(cfg=self.cfg.satellite_config) # type: ignore
+        self.rewards_plot_list = []
+        self.n_plot_list = []
+        self._step_count = 0
+
+        # Build initial satellite state so the first call to step has data
+        self.reset()
+        self._observation_states()
 
         # Direction map: (flag for `apply_manplan`, sign for thrust)
         self._direction_map: Dict[int, Tuple[str, int]] = {
@@ -98,22 +108,26 @@ class RecfgEnv(gym.Env):
             dtype=np.float64,
         )
 
-        self.satellite: Optional[Satellite] = None
-        self.rewards_plot_list = []
-        self.n_plot_list = []
-        self._step_count = 0
 
-        # Build initial satellite state so the first call to step has data
-        self.reset()
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    def _observation_states(self) -> NDArray[np.float64]:
+        """Assemble flat observation vector."""
+        if self.satellite is None or len(self.satellite.roe) == 0:
+            return np.zeros(self.cfg.satellite_observation_feature_size, dtype=np.float64)
+        else:
+            nds = np.array(self.satellite.roe[-1], dtype=np.float64).reshape(-1)
+            return nds[: self.cfg.satellite_observation_feature_size]
+        
+    
     def _select_discrete_action(self, discrete_action: Any) -> int:
         try:
             return int(np.clip(int(np.array(discrete_action).item()), 0, self.cfg.discrete_actions_size - 1))
         except Exception:
             return 0
+        
 
     def _target_vector(self) -> NDArray[np.float64]:
         """Return the desired ROE vector, defaulting to zeros if none is provided."""
@@ -123,13 +137,6 @@ class RecfgEnv(gym.Env):
         target = np.array(self.cfg.target_roe, dtype=np.float64).reshape(-1)
         return target[: self.cfg.satellite_observation_feature_size]
 
-    def _build_obs(self) -> NDArray[np.float64]:
-        """Assemble flat observation vector."""
-        if self.satellite is None or len(self.satellite.roe) == 0:
-            return np.zeros(self.cfg.satellite_observation_feature_size, dtype=np.float64)
-        else:
-            nds = np.array(self.satellite.roe[-1], dtype=np.float64).reshape(-1)
-            return nds[: self.cfg.satellite_observation_feature_size]
 
     def _compute_reward(self, thrust_mag: float, duration_steps: int) -> Tuple[float, bool]:
         """
@@ -138,7 +145,7 @@ class RecfgEnv(gym.Env):
         - optional bonus when within `target_tolerance`
         - penalty for using thrust (encourages minimal fuel)
         """
-        current = self._build_obs()
+        current = self._observation_states()
         target = self._target_vector()
 
         distance = float(np.linalg.norm(current - target))
@@ -153,6 +160,7 @@ class RecfgEnv(gym.Env):
         reward -= self.cfg.fuel_penalty_weight * thrust_mag * burn_seconds
 
         return float(reward), reached_target
+
 
     # ------------------------------------------------------------------
     # Gym API
@@ -211,13 +219,13 @@ class RecfgEnv(gym.Env):
             "n": getattr(self.satellite, "discrete_time_index_simulation", 0),
         }
 
-        obs = self._build_obs()
+        obs = self._observation_states()
         self.rewards_plot_list.append(reward)
         self.n_plot_list.append(info["n"])
 
         return obs, reward, terminated, truncated, info
 
-    def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
+    def reset(self, seed: Optional[int] = None, options: Optional[dict] = None): # type: ignore
         """Reset the satellite to its reference trajectory with a small ROE offset."""
         super().reset(seed=seed)
         # Gym may pass seed=None; fall back to a random integer to avoid torch seeding errors.
@@ -225,18 +233,18 @@ class RecfgEnv(gym.Env):
             seed = random.randint(0, 2**32 - 1)
         seed_all(seed)
 
-        self.satellite = Satellite(cfg=self.cfg.satellite_config)
+        self.satellite = Satellite(cfg=self.cfg.satellite_config) # type: ignore
         # Keep the reference trajectory and only reset the perturbed track
         self.satellite.reset_sat_states(keep_ref_trajectory=True)
 
         # Small default deviation keeps observations informative at t=0
-        self.satellite.set_initial_deviation(Droe=[0, 0, 0, 0, 600, 0])
+        self.satellite.set_initial_deviation(self.cfg.Droe_ranges) # type: ignore
 
         self.rewards_plot_list = []
         self.n_plot_list = []
         self._step_count = 0
 
-        obs = self._build_obs()
+        obs = self._observation_states()
         info = {"cost": 0.0, "sojourn_t": 0.0, "n": getattr(self.satellite, "discrete_time_index_simulation", 0)}
         return obs, info
 
