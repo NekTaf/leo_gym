@@ -49,13 +49,8 @@ class RecfgEnvConfig(BaseModel):
     target_tolerance: float = Field(
         25, ge=0, description="Distance to target (in meters of ROE norm) that counts as success"
     )
-    reward_distance_scale: float = Field(
-        1e4, gt=0, description="Scale factor to keep distance-based rewards numerically stable" #Not used atm
-    )
+
     success_reward: float = Field(100.0, description="Bonus when the satellite reaches the target band")
-    fuel_penalty_weight: float = Field(
-        1e-2, description="Penalty multiplier on thrust magnitude * burn seconds"
-    )
 
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
@@ -70,8 +65,6 @@ class RecfgEnv(gym.Env):
         
         self.satellite = Satellite(cfg=self.cfg.satellite_config) # type: ignore
         self.rewards_plot_list = []
-        self.n_plot_list = []
-        self._step_count = 0
 
         # Build initial satellite state so the first call to step has data
         self.reset()
@@ -138,56 +131,68 @@ class RecfgEnv(gym.Env):
         return target[: self.cfg.satellite_observation_feature_size]
 
 
-    def _compute_reward(self, thrust_mag: float, duration_steps: int) -> Tuple[float, bool]:
+    def _compute_reward(self) -> Tuple[float, bool]:
         """
         Shaping reward:
         - negative distance to the target ROE (scaled to keep numbers small)
         - optional bonus when within `target_tolerance`
         - penalty for using thrust (encourages minimal fuel)
         """
+        terminated = False
+        reward = 0
+        
         current = self._observation_states()
         target = self._target_vector()
 
         distance = float(np.linalg.norm(current - target))
         reward = -np.log(distance + 1)
 
-        reached_target = distance <= self.cfg.target_tolerance
-        if reached_target:
+        if distance <= self.cfg.target_tolerance:
             reward += self.cfg.success_reward
+            terminated = True
 
-        dt_seconds = getattr(getattr(self.satellite, "cfg", None), "dt", 1.0)
-        burn_seconds = max(duration_steps, 0) * dt_seconds
-        reward -= self.cfg.fuel_penalty_weight * thrust_mag * burn_seconds
+        return float(reward), terminated
+    
+    def process_action_cont(self
+                          )->None:
+        """It is good practice to always scale the network output to [-1,+1]
+        This is then min-max rescaled to the appropriate bounds 
+        
+        Note different algorithms handle action bounds differently, eg.:
+        + PPO relies on environment level clipping \b
+        + SAC relies on tanh() squashing on algo-network level \b
+    
+        """
+        
+        self.action_cont = np.clip(self.action_cont,-1,+1)
 
-        return float(reward), reached_target
+        a_min = np.array(self.cfg.low_action)
+        a_max = np.array(self.cfg.high_action)
+        
+        self.action_cont = ((self.action_cont + 1) / 2) * (a_max - a_min) + a_min
 
+            
+        return
 
     # ------------------------------------------------------------------
     # Gym API
     # ------------------------------------------------------------------
-    def step(self, action: Dict[str, Any]):
+    def step(self, action: Dict[str, Any]
+             ) -> Tuple[NDArray[np.float64], float, bool, bool, Dict[str, Any]]:
         """Apply burn plan, propagate the satellite, and return gym-style outputs."""
         if self.satellite is None:
             raise RuntimeError("Environment used before calling reset().")
 
-        # Clip continuous actions and turn them into integer timesteps
-        continuous = np.clip(
-            np.array(action["continuous"], dtype=np.float64),
-            np.array(self.cfg.low_action, dtype=np.float64),
-            np.array(self.cfg.high_action, dtype=np.float64),
-        )
-        delay_steps = int(np.round(continuous[0]))
-        duration_steps = int(np.round(continuous[1]))
-
-        remaining_steps = max(
-            0, int(self.cfg.max_time_index - self.satellite.discrete_time_index_simulation)
-        )
-        max_delay = max(0, min(int(self.cfg.high_action[0]), remaining_steps))
-        delay_steps = int(np.clip(delay_steps, int(self.cfg.low_action[0]), max_delay))
-
-        available_after_delay = max(0, remaining_steps - delay_steps)
-        max_duration = max(0, min(int(self.cfg.high_action[1]), available_after_delay))
-        duration_steps = int(np.clip(duration_steps, int(self.cfg.low_action[1]), max_duration))
+        terminated = False
+        truncated = False
+        reward = 0
+        
+        self.action_cont = action["continuous"]
+        self.process_action_cont()       
+        sojourn_t = int(np.sum(self.action_cont[-2:]))
+        
+        delay_steps = int(np.round(self.action_cont[0]))
+        duration_steps = int(np.round(self.action_cont[1]))
 
         # Map discrete choice to an RTN axis and thrust sign
         discrete_idx = self._select_discrete_action(action["discrete"])
@@ -196,23 +201,22 @@ class RecfgEnv(gym.Env):
         thrust_mag = float(sign * self.cfg.f_max)
         manplan = np.array([thrust_mag, delay_steps, duration_steps], dtype=np.float64)
 
-        # Advance the simulator. Zero thrust still advances time through delay/duration.
-        if remaining_steps > 0 and (delay_steps + duration_steps) > 0:
-            self.satellite.apply_manplan(manplan=manplan, flag_man_type=axis_flag)
+        self.satellite.apply_manplan(
+            manplan=manplan,
+            flag_man_type=axis_flag)
+        
+        self.current_episode_timestep += 1
 
-        reward, reached_target = self._compute_reward(abs(thrust_mag), duration_steps)
-        self._step_count += 1
-
+        reward, terminated = self._compute_reward()
+        
+        # Truncation check
         time_up = self.satellite.discrete_time_index_simulation >= self.cfg.max_time_index
-        terminated = reached_target or time_up
-        truncated = False
-        if time_up and not reached_target:
+        if time_up:
             truncated = True
 
-        sojourn_hours = (delay_steps + duration_steps) * getattr(self.satellite.cfg, "dt", 1) / 3600
         info = {
             "cost": abs(thrust_mag) * duration_steps,
-            "sojourn_t": sojourn_hours,
+            "sojourn_t": sojourn_t/60,  # hours
             "chosen_discrete": discrete_idx,
             "manplan": manplan.tolist(),
             "axis_flag": axis_flag,
@@ -221,9 +225,9 @@ class RecfgEnv(gym.Env):
 
         obs = self._observation_states()
         self.rewards_plot_list.append(reward)
-        self.n_plot_list.append(info["n"])
 
         return obs, reward, terminated, truncated, info
+
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None): # type: ignore
         """Reset the satellite to its reference trajectory with a small ROE offset."""
@@ -231,11 +235,14 @@ class RecfgEnv(gym.Env):
         # Gym may pass seed=None; fall back to a random integer to avoid torch seeding errors.
         if seed is None:
             seed = random.randint(0, 2**32 - 1)
-        seed_all(seed)
 
         self.satellite = Satellite(cfg=self.cfg.satellite_config) # type: ignore
         # Keep the reference trajectory and only reset the perturbed track
         self.satellite.reset_sat_states(keep_ref_trajectory=True)
+        
+        self.rewards_plot_list = []
+        
+        self.current_episode_timestep = 0
 
         Droe_ranges = self.cfg.Droe_ranges
         Droe = np.zeros(6, dtype=np.float64)
@@ -251,13 +258,8 @@ class RecfgEnv(gym.Env):
         # Small default deviation keeps observations informative at t=0
         self.satellite.set_initial_deviation(Droe) # type: ignore
 
-        self.rewards_plot_list = []
-        self.n_plot_list = []
-        self._step_count = 0
 
         obs = self._observation_states()
         info = {"cost": 0.0, "sojourn_t": 0.0, "n": getattr(self.satellite, "discrete_time_index_simulation", 0)}
         return obs, info
 
-    def close(self):
-        return

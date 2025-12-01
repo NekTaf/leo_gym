@@ -26,7 +26,7 @@ from leo_gym.rl_algorithms.h_ppo.actor_critic_nets import (
 # ===== Satellite configuration =====
 satellite_params = {
     "dt":   60,
-    "days": 2,
+    "days": 0.5,
     "ideal_traj_params": {
         "flag_rtn_thrust": True,
         "flag_mass_loss": True,
@@ -70,7 +70,7 @@ sat_cfg = SatelliteROEConfig(**satellite_params)
 
 # ===== Environment configuration =====
 env_cfg = RecfgEnvConfig(
-    low_action=[9, 0],
+    low_action=[9, 1],
     high_action=[55, 41],
     satellite_config=sat_cfg,
     satellite_observation_feature_size=6,
@@ -86,9 +86,7 @@ env_cfg = RecfgEnvConfig(
                 [-800,+800]],
     target_roe=None,
     target_tolerance=25.0,
-    reward_distance_scale=1e4,
     success_reward=10.0,
-    fuel_penalty_weight=1e-2,
 )
 
 # ===== PPO configurations =====
@@ -100,11 +98,11 @@ ppo_cfg = PPOConfig(
     gae_lambda=0.95,
     lr=3e-4,
     init_entropy_coef=0.001,
-    batch_size=1000,
+    batch_size=200,
     target_kl=0.05,
     lr_decay_coef=0,
     epochs=5,
-    n_envs=16,
+    n_envs=10,
     normalize_advantage=True,
     init_std=[0.4, 0.4],
     log_to_mlflow=True,
@@ -114,10 +112,10 @@ ppo_cfg = PPOConfig(
     policy_wrapper=PolicyNetwork,
     critic_wrapper=ValueNetwork,
     observation_encoder=ObservationEncoder,
-    default_num_envs=16, # Number of parallel environments (default = 100)
+    default_num_envs=10, # Number of parallel environments (default = 100)
     steps_per_env=20,
     save_nets_period=int(1e5),
-    max_training_timesteps=int(1e6),
+    max_training_timesteps=int(1e2),
     trained_algorithm_config_path=None,
 )
 
