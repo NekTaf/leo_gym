@@ -26,7 +26,7 @@ from leo_gym.rl_algorithms.h_ppo.actor_critic_nets import (
 # ===== Satellite configuration =====
 satellite_params = {
     "dt":   60,
-    "days": 0.5,
+    "days": 1,
     "ideal_traj_params": {
         "flag_rtn_thrust": True,
         "flag_mass_loss": True,
@@ -77,7 +77,7 @@ env_cfg = RecfgEnvConfig(
     continuous_actions_size=2,
     discrete_actions_size=7,  # R/T/N with +/- and coast
     f_max=sat_cfg.pert_traj_params.f_max,
-    max_time_index=int(24 * sat_cfg.days * 60 * 60 / sat_cfg.dt),
+    max_time_index=int(12 * sat_cfg.days * 60 * 60 / sat_cfg.dt), # 12 hour episodes
     Droe_ranges=[[0,0],
                 [0,0],
                 [0.0,0.0],
@@ -114,8 +114,8 @@ ppo_cfg = PPOConfig(
     observation_encoder=ObservationEncoder,
     default_num_envs=10, # Number of parallel environments (default = 100)
     steps_per_env=20,
-    save_nets_period=int(1e5),
-    max_training_timesteps=int(1e2),
+    save_nets_period=int(100_000),
+    max_training_timesteps=int(50_000),
     trained_algorithm_config_path=None,
 )
 
@@ -131,5 +131,5 @@ class TrainingConfig(BaseModel):
 training_cfg = TrainingConfig(
     tracking_uri="mlruns",
     experiment_name="recfg_hppo",
-    run_name=None,
+    run_name="test",
 )

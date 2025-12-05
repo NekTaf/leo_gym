@@ -94,15 +94,14 @@ if __name__ == "__main__":
         ppo.train(env, training_cfg)
 
 
-        # # ===== Save final models =====
+        # ===== Save final models =====
         # directory_save = os.path.join(
-        #     training_cfg.tracking_uri,
-        #     experiment_id,
-        #     run_id,
+        # training_cfg.tracking_uri,
+        # training_cfg.experiment_name,
+        # training_cfg.run_name,
         #     "models",
-        #     "final"
-        # )
-        
+        #      "final"
+        #  )
         # os.makedirs(directory_save, exist_ok=True)
         # ppo.save_models(directory_save=directory_save)
     env.close()

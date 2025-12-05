@@ -231,7 +231,7 @@ class RecfgEnv(gym.Env):
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None): # type: ignore
         """Reset the satellite to its reference trajectory with a small ROE offset."""
-        super().reset(seed=seed)
+        super().reset(seed=seed) # Use gymnasium's reset as base which handles seeding
         # Gym may pass seed=None; fall back to a random integer to avoid torch seeding errors.
         if seed is None:
             seed = random.randint(0, 2**32 - 1)
@@ -247,15 +247,14 @@ class RecfgEnv(gym.Env):
         Droe_ranges = self.cfg.Droe_ranges
         Droe = np.zeros(6, dtype=np.float64)
         
-        Droe[0] = np.random.uniform(Droe_ranges[0][0], Droe_ranges[0][1])  # ada
-        Droe[1] = np.random.uniform(Droe_ranges[1][0], Droe_ranges[1][1])  # adl
-        Droe[2] = np.random.uniform(Droe_ranges[2][0], Droe_ranges[2][1])  # adex  
-        Droe[3] = np.random.uniform(Droe_ranges[3][0], Droe_ranges[3][1])  # adey
-        Droe[4] = np.random.uniform(Droe_ranges[4][0], Droe_ranges[4][1])  # adix
-        Droe[5] = np.random.uniform(Droe_ranges[5][0], Droe_ranges[5][1])  # adiy
+        Droe[0] = self.np_random.uniform(Droe_ranges[0][0], Droe_ranges[0][1])  # ada
+        Droe[1] = self.np_random.uniform(Droe_ranges[1][0], Droe_ranges[1][1])  # adl
+        Droe[2] = self.np_random.uniform(Droe_ranges[2][0], Droe_ranges[2][1])  # adex  
+        Droe[3] = self.np_random.uniform(Droe_ranges[3][0], Droe_ranges[3][1])  # adey
+        Droe[4] = self.np_random.uniform(Droe_ranges[4][0], Droe_ranges[4][1])  # adix
+        Droe[5] = self.np_random.uniform(Droe_ranges[5][0], Droe_ranges[5][1])  # adiy
         
-        
-        # Small default deviation keeps observations informative at t=0
+    
         self.satellite.set_initial_deviation(Droe) # type: ignore
 
 
