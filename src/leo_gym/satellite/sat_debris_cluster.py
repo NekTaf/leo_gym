@@ -24,6 +24,7 @@ To investigate:
 import os
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional
+from pathlib import Path
 
 # Third-party
 import matplotlib.pyplot as plt
@@ -101,7 +102,10 @@ class SatDebrisCluster():
         self.dt_col:int = 60 # Simulation time for generating collisions (same as actual sim time in this case)
 
         if self.cfg.max_debris != 1:
-            self.no_debris = np.random.randint(low=self.cfg.min_debris, high=self.cfg.max_debris+1, dtype=int)
+            self.no_debris = np.random.randint(
+                low=self.cfg.min_debris, 
+                high=self.cfg.max_debris+1,
+                dtype=int)
 
         
         # Initialize primary satellite covariance
@@ -114,17 +118,21 @@ class SatDebrisCluster():
         
         for i in range(self.no_debris):
             
-            self.conjuction_time:int = int(np.random.randint(low=self.cfg.conjunction_time_window_index[0],
-                                                         high=self.cfg.conjunction_time_window_index[1],
-                                                         dtype=int)*60/self.cfg.dt)
+            self.conjuction_time:int = int(
+                np.random.randint(
+                    low=self.cfg.conjunction_time_window_index[0],
+                    high=self.cfg.conjunction_time_window_index[1],
+                    dtype=int)*60/self.cfg.dt
+                )
             
             self.conjuction_points_time.append(self.conjuction_time)
-            pvm_col0 = collision_generator(rv0=np.array(self.all_object_rvm0[0][:6]),
-                                    dt = self.dt_col, 
-                                    days=self.cfg.days,
-                                    relative_t_tca=int(self.conjuction_time*self.cfg.dt/self.dt_col),
-                                    params_dyn=self.cfg.params_dyn,
-                                    )
+            pvm_col0 = collision_generator(
+                rv0=np.array(self.all_object_rvm0[0][:6]),
+                dt = self.dt_col, 
+                days=self.cfg.days,
+                relative_t_tca=int(self.conjuction_time*self.cfg.dt/self.dt_col),
+                params_dyn=self.cfg.params_dyn,
+                )
             
             self.all_object_rvm0.append(pvm_col0.tolist())
 
@@ -154,11 +162,9 @@ class SatDebrisCluster():
             
         return
 
-    def init_ideal_traj(self
-                        )->None:
+    def init_ideal_traj(self)->None:
         """initialize satellite starting point.
-        
-        Droe_ranges ads a displacement relative to the starting trajectory point
+        Droe_ranges ads a displacement relative to the starting trajectory point 
         expressed in terms of relative orbital elements. 
         """
         
@@ -179,7 +185,7 @@ class SatDebrisCluster():
         self.ideal_traj_rvm.append(self.all_object_rvm0[0]) 
         
         rv0_displaced = Delta_roe_to_rv(
-            Droe=[0,Dadl,Dadex,Dadey,0,0],
+            Droe=np.array([0,Dadl,Dadex,Dadey,0,0]),
             rv_ref=self.ideal_traj_rvm[0][:6]) 
 
         # rewrite initial position of primary satellite to the displaced one
@@ -348,10 +354,11 @@ class SatDebrisCluster():
                 self.controls_RTN.append(self.dynamics1.u_thruster_rtn)
 
 
-        self.ideal_traj_rvm.append(self.dynamics_ideal.propagate(x=np.array(self.ideal_traj_rvm[-1]),
-                                                                 u=np.zeros(3),
-                                                                 t=self.t[self.n],
-                                                                 dt=self.cfg.dt))             
+        self.ideal_traj_rvm.append(self.dynamics_ideal.propagate(
+            x=np.array(self.ideal_traj_rvm[-1]),
+            u=np.zeros(3),
+            t=self.t[self.n],
+            dt=self.cfg.dt))             
 
         roe, oe, oe_ref = rv_to_roe_and_nsoe(np.array(self.primary_sat_and_debris_rvm[0][-1][:6]), 
                                             np.array(self.ideal_traj_rvm[-1][:6]))
@@ -377,8 +384,10 @@ class SatDebrisCluster():
                 P_max_product = 0
             
             self.p_max_predictions.append(P_max_product)
-            self.delta_r_b_plane.append(np.array([metrics_at_tca[:,3],
-                                                  metrics_at_tca[:,4]]))
+            self.delta_r_b_plane.append(np.array([
+                metrics_at_tca[:,3],
+                metrics_at_tca[:,4]
+                ]))
             
         except IndexError: # No more debris objects left
             self.p_max_predictions.append(0)
@@ -389,14 +398,9 @@ class SatDebrisCluster():
     def apply_manplan(self, manplan:list)->None:
         """Applies manuever plan and updates satellite and debris object positions 
 
-        Args:
-            manplan (list): size(4,) thrust axis, thrust magnitude,
-            maneuver start time, maneuver duration time \b
-            
+        :param manplan: size(4,) thrust axis, thrust magnitude, manuever start time and duration time \b
             manplan[0] = "rad", "tan", "norm" \b
             
-        Returns:
-            int: the new discrete time index after the manuever finishes executing 
         """
                 
         self.manplans.append(manplan + [self.n*self.cfg.dt+
@@ -427,6 +431,8 @@ class SatDebrisCluster():
         
         self.propagate_2_tca()
         
+        return
+        
     
     def plot_projected_position_bplane(self, save_path:str=None)->None:
     
@@ -443,7 +449,7 @@ class SatDebrisCluster():
         y = y[mask]
         indices = indices[mask]
 
-        plt.figure(figsize=(6,6))
+        plt.figure(figsize=(4,4))
         scatter = plt.scatter(
             x, y,
             c=indices,
@@ -451,7 +457,7 @@ class SatDebrisCluster():
             marker='o'
         )
 
-        lim = np.max(np.abs(np.concatenate([x, y])))
+        lim = np.max(np.abs(np.concatenate([x, y])))+500
         plt.xlim(-lim, lim)
         plt.ylim(-lim, lim)
         plt.gca().set_aspect('equal', 'box')
@@ -462,10 +468,6 @@ class SatDebrisCluster():
         plt.colorbar(scatter, label='Episode step index')
         plt.show()
     
-        return
-
-    def plot_roe_states(self, save_path:str)->None:
-        
         return
     
     def reset_states(self)->None:
@@ -499,11 +501,20 @@ class SatDebrisCluster():
         self.primary_sat_and_debris_b_plane = [ [] for _ in range(self.no_debris+1)]
         self.non_singular_oe = [ [] for _ in range(self.no_debris+1)]
 
-        for i, (object_rvm,object_mahala,object_bplane,rvm0,nsoe) in enumerate(zip(self.primary_sat_and_debris_rvm,
-                                        self.primary_sat_and_debris_mahala,
-                                        self.primary_sat_and_debris_b_plane,
-                                        self.all_object_rvm0, 
-                                        self.non_singular_oe)):
+        for i, (
+            object_rvm,
+            object_mahala,
+            object_bplane,
+            rvm0,
+            nsoe
+            ) in enumerate(
+                    zip(
+                        self.primary_sat_and_debris_rvm,
+                        self.primary_sat_and_debris_mahala,
+                        self.primary_sat_and_debris_b_plane,
+                        self.all_object_rvm0, 
+                        self.non_singular_oe
+                        )):
             
             object_rvm.append(np.array(rvm0)) 
             object_bplane.append(np.zeros(3))

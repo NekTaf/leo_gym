@@ -23,6 +23,8 @@ from leo_gym.satellite.sat_debris_cluster import (
 )
 from leo_gym.utils.matplot_style_cfg import *
 from leo_gym.utils.utils import seed_all
+from pathlib import Path
+import json 
 
 gym.logger.set_level(40)
 
@@ -42,6 +44,8 @@ class CamEnvConfig(BaseModel):
     ade_norm_req: float = Field(..., ge=0, description="ADE normalization")
     max_time_index: int = Field(..., ge=1, description="Max real time per episode")
     
+    reduced_obs: bool = Field(False,description="Reduce observation size based on SHAP analysis")
+    
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
     
 
@@ -59,12 +63,12 @@ class CamEnv(gym.Env):
     """
 
     def __init__(self, 
-                 cfg:CamEnvConfig,
+                 cfg:CamEnvConfig|str|Path,
                  seed:int):
         
         super(CamEnv, self).__init__()
         
-        self.cfg = cfg
+        self.load_cfg(cfg)
         seed_all(seed)        
         self.reset()
         
@@ -76,19 +80,25 @@ class CamEnv(gym.Env):
                                        shape=(2,), 
                                        dtype=np.float64)
         })
-            
-        self.observation_space = spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=(13,),
-            dtype=np.float64
-        )
+        
+        if self.cfg.reduced_obs:
+            self.observation_space = spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(6,),
+                dtype=np.float64
+            )
+        else:
+            self.observation_space = spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(15,),
+                dtype=np.float64
+            )
 
                         
     
-    def _observation_states(self
-                            )->NDArray[np.float64]:
-        
+    def _observation_states(self)->NDArray[np.float64]:
         # Relative orbital elements between satellite and unperturbated trajectory
         roe = np.array(self.DebrisSwarm_1.roe)
         
@@ -106,39 +116,40 @@ class CamEnv(gym.Env):
         inc_p = non_singular_oe_p[4] # range 0 - 6 no need to normalize
         raan_p = non_singular_oe_p[5] #range 0 - 6 no need to normalize
 
-        # Observations of primary satellite 
-        obs_satellite = np.array((
-            l_p,
-            inc_p,
-            raan_p,
-            adl,
-            adex, 
-            adey))
-        
-        obs_satellite_minimal = np.array([
-            l_p,
-            adl,
-            adex,
-            adey])        
+        if not self.cfg.reduced_obs:
+            obs_debris = np.zeros((self.DebrisSwarm_1.no_debris,9))
 
-        # Debris related observations
-        obs_debris = np.zeros((self.DebrisSwarm_1.no_debris,7))
-        obs_debris_minimal = np.zeros((self.DebrisSwarm_1.no_debris,2))
+            # Observations of primary satellite 
+            obs_satellite = np.array((
+                l_p,
+                inc_p,
+                raan_p,
+                adl,
+                adex, 
+                adey))
+        else:
+            obs_debris = np.zeros((self.DebrisSwarm_1.no_debris,2))
+
+            obs_satellite = np.array([
+                l_p,
+                adl,
+                adex,
+                adey])        
         
         P_max_propagated = np.array(self.DebrisSwarm_1.metrics_at_tca)
 
         for i, (nsoe) in enumerate(non_singular_oe_s):
         
-            #discrete conjuction time (discretized dt=60s)
+            # discrete conjuction time (discretized dt=60s)
             tca_true = self.DebrisSwarm_1.conjuction_points_time[i]
             tca_till = np.array(tca_true - self.DebrisSwarm_1.n).reshape(1,)
 
             if np.sign(tca_till) == -1: 
-                ## no observations if tca is past
+                # no observations if tca is past
                 pass
             
             else:             
-                ## log to normalize
+                # log to normalize
                 p_max_at_tca = np.array([np.log((P_max_propagated[i,1]))]) 
                 
                 ## Min-Max scale to -/+2.5
@@ -186,21 +197,24 @@ class CamEnv(gym.Env):
                 l_s = np.array([nsoe[1]]) # range 0 - 6 no need to normalize
                 inc_s = np.array([nsoe[4]]) # range 0 - 6 no need to normalize
                 raan_s = np.array([nsoe[5]]) # range 0 - 6 no need to normalize
-
-                obs_debris[i,:] = np.concatenate((
-                    l_s,
-                    inc_s,
-                    raan_s,
-                    tca_till,
-                    det_cov_scaled,
-                    combined_radius,
-                    p_max_at_tca
-                    ), axis=0)
                 
-                obs_debris_minimal[i,:] = np.concatenate((
-                    tca_till,
-                    p_max_at_tca
-                    ), axis=0)
+                delta_r_b = np.array(self.DebrisSwarm_1.delta_r_b_plane[-1]).reshape(2,)
+                delta_r_b = delta_r_b/5e2
+                if not self.cfg.reduced_obs:
+                    obs_debris[i,:] = np.concatenate((
+                        l_s,
+                        inc_s,
+                        raan_s,
+                        tca_till,
+                        det_cov_scaled,
+                        combined_radius,
+                        p_max_at_tca,
+                        delta_r_b), axis=0)
+                else:
+                    obs_debris[i,:] = np.concatenate((
+                        tca_till,
+                        p_max_at_tca
+                        ), axis=0)
 
         obs_debris = np.array(obs_debris)
                         
@@ -209,9 +223,7 @@ class CamEnv(gym.Env):
         return obs
     
 
-    def _reward_fun(self
-                    )->Tuple[float,bool]:
-
+    def _reward_fun(self)->Tuple[float,bool]:
         reward = 0
         terminated = False
         self.cost = 0
@@ -226,47 +238,45 @@ class CamEnv(gym.Env):
 
         # Recovery phase rewards
         if P_max_product == 0: #No more debris, P_max list empty
+            
+            # Check if any collisions occurred 
+            for i in range(self.DebrisSwarm_1.no_debris):
+                try:
+                    conjuction_time = self.DebrisSwarm_1.conjuction_points_time[i]
+                    p_max = self.DebrisSwarm_1.primary_sat_and_debris_mahala[1+i][conjuction_time][1] 
+                    
+                    if p_max>=self.cfg.p_max_limit: # Propagation index
+                        reward = -100
+                        terminated = True
+                        return reward, terminated
+                    
+                except IndexError:
+                    pass
+
             if  ade<=self.cfg.ade_norm_req and abs(adl)<=self.cfg.adl_req:
                 reward = +1e3
                 terminated = True
+                
+                return reward, terminated
+
             else:           
                 adl_based_weight = (abs(adl)/self.cfg.adl_req)
                 ade_based_weight = (ade/self.cfg.ade_norm_req)
 
                 reward = (-adl_based_weight -ade_based_weight)/3
+                
+                return reward, terminated
+
         # CAM phase rewards
         else:
             reward = -np.log(P_max_product) -9 
-        
-        # Check if collision occured 
-        for i in range(self.DebrisSwarm_1.no_debris):
-            # Check at TCA if a collision had a P_max greater than the limit
-            # If it fails, except index error, then it means collision hasn't occurred yet
-            try:
-                conjuction_time = self.DebrisSwarm_1.conjuction_points_time[i]
-                p_max = self.DebrisSwarm_1.primary_sat_and_debris_mahala[1+i][conjuction_time][1] 
-
-                if p_max>=self.cfg.p_max_limit: # Propagation index
-                    reward = -100
-                    terminated = True
-                    break
-            except IndexError:
-                # collision hasn't occurred yet
-                pass
-            
-            if self.DebrisSwarm_1.p_max_predictions[-1]<self.cfg.p_max_limit and P_max_product!=0:
-                # reward = -self.delta_t0_and_man[1]*abs(self.f_direction)/2
-                pass
-        
+                
         reward = reward 
         
         return reward, terminated
                 
                 
-    def _discretize_action(self, 
-                           action:int)->list:
-        
-
+    def _discretize_action(self, action:int)->list:
         dis_actions_list = [[0,0],
                             [0,+1], 
                             [0,-1]]
@@ -285,7 +295,6 @@ class CamEnv(gym.Env):
 
 
     def step(self, action):
-        
         delay_duration_thrust:np.ndarray = action["continuous"]
         delay_duration_thrust = self._clip_and_rescale(delay_duration_thrust, self.cfg.low_action, self.cfg.high_action)
 
@@ -318,7 +327,7 @@ class CamEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=None)
-                                
+                 
         self.DebrisSwarm_1 = SatDebrisCluster(self.cfg.debris_cluster_config)
         self.rewards_plot_list = []
         self.n_plot_list = []
@@ -336,10 +345,7 @@ class CamEnv(gym.Env):
         pass
     
     
-    def plot_rewards(self,
-                save_path:str
-                )->None:
-    
+    def plot_rewards(self, save_path:str)->None:
         plt.figure(figsize=(4, 3))
         plt.plot(self.rewards_plot_list) 
         plt.xlabel("Environment timestep")
@@ -354,7 +360,6 @@ class CamEnv(gym.Env):
 
     
     def plot_states_interactive(self)->None:
-        
         # If you’re in a Jupyter notebook and need MathJax for LaTeX:
         from IPython.display import (HTML, display,)
 
@@ -456,5 +461,144 @@ class CamEnv(gym.Env):
         
         
         return
+    
+    
+    def plot_roe_states(self, save_path:str|Path|None)->None:
+        
+        roe = np.array(self.DebrisSwarm_1.roe)
+
+        # relative longitude and eccentricity plots
+        adl = roe[:,1]
+        ade = np.sqrt(roe[:,2]**2 + roe[:,3]**2)
+
+        fig, axs = plt.subplots(2, 1, sharex=True,figsize=(9, 5))
+
+        axs[0].plot(adl)
+        axs[0].axhline(self.cfg.adl_req,label=r"$|a \delta \lambda|_\mathrm{req}$ (m)",
+                       color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1])
+        axs[0].axhline(-self.cfg.adl_req,
+                       color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1])
+        axs[0].set_ylabel(r"$a \delta \lambda$ (m)")
+
+
+        axs[1].plot(ade)
+        axs[1].axhline(self.cfg.ade_norm_req, label=r"$\|a \delta \mathbf{e}\|_\mathrm{req}$ (m)",
+                       color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
+                    )
+        axs[1].set_ylabel(r"$\|a \delta \mathbf{e}\|$ (m)")
+
+        axs[0].legend()
+        axs[1].legend()
+        
+        # Radial thrust plot
+        fig4, ax = plt.subplots(figsize=(9, 2))
+
+        rtn = np.asarray(self.DebrisSwarm_1.controls_RTN)
+        ax.plot(rtn[:, 0])
+        
+        ax.set_xlabel("Minutes")
+        ax.set_ylabel("$f_r$ (N)")
+
+        plt.show()
+
+        
+        # Projected probability plot
+        fig3, ax = plt.subplots(figsize=(9, 2))
+        
+        pmax = np.array(self.DebrisSwarm_1.p_max_predictions)
+        times_full = np.array(self.DebrisSwarm_1.manaplan_call_relative_time)
+        times = times_full / 60
+        n = min(times.size, pmax.size)
+        ax.scatter(times[:n], np.log10(pmax[:n]), s=10)
+
+        ax.axhline(np.log10(self.cfg.p_max_limit), label=r"$\log_{10}(P^\mathrm{max}_{c,\mathrm{req}})$",
+                   color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
+                )
+        ax.legend()
+        
+        ax.set_xlabel("Minutes")
+        ax.set_ylabel(r"$\log_{10}(P^\mathrm{max}_{c})$")
+
+
+        
+        # 3D Plot
+        fig2 = plt.figure(figsize=(4.5, 4.5), constrained_layout=True)
+        ax = fig2.add_subplot(111, projection="3d")
+
+        rvm_total = np.array(self.DebrisSwarm_1.primary_sat_and_debris_rvm)
+
+        prim = rvm_total[0]
+        sec  = rvm_total[1]
+        cp   = self.DebrisSwarm_1.conjuction_time
+        
+        x_cp, y_cp, z_cp = sec[cp, :3]
+        ax.scatter(x_cp, y_cp, z_cp, s=5, label="Conjunction Point", color=plt.rcParams["axes.prop_cycle"].by_key()["color"][2])
+        ax.scatter(x_cp, y_cp, z_cp, s=80, color=plt.rcParams["axes.prop_cycle"].by_key()["color"][2])
+
+
+        ax.scatter(prim[:,0], prim[:,1], prim[:,2], s=5, label="Satellite")
+        ax.scatter(sec[:,0],  sec[:,1],  sec[:,2],  s=5, label="Debris")
+
+        ax.set_xlabel("$X$ (m)")
+        ax.set_ylabel("$Y$ (m)")
+        ax.set_zlabel("$Z$ (m)")
+
+        ax.set_box_aspect(None, zoom=0.80)       
+        ax.grid(False)
+        ax.legend(markerscale=3)
+        
+        
+        
+        
+        # firing 3D plot
+        
+        
+        
+        
+        N = 110
+        arrow_len = 1e6
+
+        fig = plt.figure(figsize=(4.5, 4.5), constrained_layout=True)
+        ax = fig.add_subplot(111, projection="3d")
+
+        ax.scatter(prim[:N,0], prim[:N,1], prim[:N,2], s=4)
+
+        norms = np.linalg.norm(prim[:N], axis=1)
+        r_hat = prim[:N] / norms[:, None]
+        sign = np.sign(rtn[:N,0])[:, None]
+        radial_vecs = r_hat * sign * arrow_len
+
+        ax.quiver(
+            prim[:N,0], prim[:N,1], prim[:N,2],
+            radial_vecs[:,0], radial_vecs[:,1], radial_vecs[:,2]
+        )
+
+        ax.set_xlabel("$X$ (m)")
+        ax.set_ylabel("$Y$ (m)")
+        ax.set_zlabel("$Z$ (m)")
+        ax.view_init(elev=30, azim=45)
+        
+        ax.set_box_aspect(None, zoom=0.80)       
+        ax.grid(False)
+
+
+        plt.show()
+        
+        
+        
+
+        return
+
+    
+    
+    def load_cfg(self,cfg:str|CamEnvConfig|Path):
+        
+        if isinstance(cfg, (str, os.PathLike, Path)):
+            with open(cfg, "r") as f:
+                data = json.load(f)
+            self.cfg = CamEnvConfig(**data)
+        else:
+            self.cfg = cfg
+    
 
 

@@ -67,10 +67,10 @@ if __name__ == "__main__":
 
 
     # Prepare vectorized environments
-    SEEDS = [random.randint(0, 2**32 - 1) for _ in range(ppo_cfg.default_num_envs)]
+    SEEDS = [random.randint(0, 2**32 - 1) for _ in range(ppo_cfg.n_envs)]
     print("Seeds: ",SEEDS)
     
-    env = AsyncVectorEnv([make_env(env_cfg, SEEDS, i) for i in range(ppo_cfg.default_num_envs)])
+    env = AsyncVectorEnv([make_env(env_cfg, SEEDS, i) for i in range(ppo_cfg.n_envs)])
     
     if ppo_cfg.trained_algorithm_config_path is not None:
         with open(ppo_cfg.trained_algorithm_config_path, "r") as f:
@@ -87,7 +87,7 @@ if __name__ == "__main__":
         
         # Update PPO config with environment spaces
         ppo_cfg = ppo_cfg.model_copy(update={
-            "env_obs":    env.single_observation_space,
+            "env_obs": env.single_observation_space,
             "env_actions": env.single_action_space,
         })
 

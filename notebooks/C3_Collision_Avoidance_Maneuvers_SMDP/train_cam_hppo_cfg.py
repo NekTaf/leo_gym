@@ -49,6 +49,13 @@ from leo_gym.rl_algorithms.h_ppo.actor_critic_nets import (
 env_cfg = CamEnvConfig(
     high_action=[55, 41],
     low_action=[9, 1],
+    
+    reduced_obs = False,
+    
+    # Change action space as to not allign with opposite sides of the orbit
+    # high_action=[20, 15],
+    # low_action=[9, 1],
+    
     max_time_index=1300,
     p_max_limit=1e-3,
     adl_req=400,
@@ -97,28 +104,31 @@ env_cfg = CamEnvConfig(
         conjunction_time_window_index=[650, 800],
         Droe_ranges=[
             [0,0], #ada
-            # [-1500,+1500], #adl
-            # [-300,+300], #adex
-            # [-300,+300], #adey
-            [0,0], #adl
-            [0,0], #adex
-            [0,0], #adey
+            
+            [-500,+500], #adl
+            [-300,+300], #adex
+            [-300,+300], #adey
+            
+            # [0,0], #adl
+            # [0,0], #adex
+            # [0,0], #adey
+            
             [0,0], #adix
             [0,0] #adiy
         ],
         C_rtn_s_ranges = [
-            [100,150],
-            [150,200],
-            [100,150]
+            [50,100],
+            [100,200],
+            [50,100]
         ],
         
         C_rtn_p_ranges = [
             [10,50],
-            [75,100],
+            [50,100],
             [10,50]
         ],
 
-        radius_combined_ranges=[10,100],
+        radius_combined_ranges=[10,75],
     ),
 )
 
@@ -131,23 +141,22 @@ ppo_cfg = PPOConfig(
     gae_lambda=0.95,
     lr=3e-4,
     init_entropy_coef=0.001,
-    batch_size=1000,
+    batch_size=8000,
     target_kl=0.05,
     lr_decay_coef=0,
     epochs=5,
-    n_envs=100,
+    n_envs=400,
     normalize_advantage=True,
     init_std=[0.4, 0.4],
     log_to_mlflow=True,
     device="cuda",
-    activation_fun = SquashedNormal,
-    encoder_hidden_size=256,
+    continuous_dist_cls = SquashedNormal,
+    net_arch=[64,64,T.nn.Tanh],
     policy_wrapper=PolicyNetwork,
     critic_wrapper=ValueNetwork,
     observation_encoder=ObservationEncoder,
-    default_num_envs=100, 
-    steps_per_env=70,
-    save_nets_period=int(1e5),
+    steps_per_env=20,
+    save_nets_period=int(13),
     max_training_timesteps=int(7e6),
     trained_algorithm_config_path = None
 
