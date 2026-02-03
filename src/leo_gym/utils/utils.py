@@ -336,22 +336,20 @@ def random_vector_know_norm(k:int,
 def generate_random_perpendicular_normalized_vector(n:np.ndarray
                                                     )->np.ndarray:
     
-    """Inputs:
-            n (NDArray[np.float64]): input vector (3,)
-        
-        Returns:
-            w (NDArray[np.float64]): perpendicular vector to input vector n (3,)
-            
-            
-        Reference: 
-        @MISC {2347293,
-            TITLE = {How to find a random unit vector orthogonal to a random unit vector in 3D?},
-            AUTHOR = {Ronald Blaak (https://math.stackexchange.com/users/458842/ronald-blaak)},
-            HOWPUBLISHED = {Mathematics Stack Exchange},
-            NOTE = {URL:https://math.stackexchange.com/q/2347293 (version: 2017-07-05)},
-            EPRINT = {https://math.stackexchange.com/q/2347293},
-            URL = {https://math.stackexchange.com/q/2347293}
-        }
+    """
+    :params n: input vector (3,)
+    
+    :returns w: perpendicular vector to input vector n (3,)
+           
+    Reference: 
+    @MISC {2347293,
+        TITLE = {How to find a random unit vector orthogonal to a random unit vector in 3D?},
+        AUTHOR = {Ronald Blaak (https://math.stackexchange.com/users/458842/ronald-blaak)},
+        HOWPUBLISHED = {Mathematics Stack Exchange},
+        NOTE = {URL:https://math.stackexchange.com/q/2347293 (version: 2017-07-05)},
+        EPRINT = {https://math.stackexchange.com/q/2347293},
+        URL = {https://math.stackexchange.com/q/2347293}
+    }
     """
     
     n = n/np.linalg.norm(n)

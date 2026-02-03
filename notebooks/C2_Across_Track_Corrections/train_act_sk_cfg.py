@@ -103,7 +103,7 @@ class PpoCfg():
     )
     def __post_init__(self):
         self.batch_size = int(NUM_ENV * self.n_steps)
-
+ 
 
 ppo_cfg = PpoCfg()
 ppo_smdp_cfg = PpoSmdpCfg()

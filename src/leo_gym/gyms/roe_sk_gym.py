@@ -77,11 +77,12 @@ class RoeGym(gym.Env):
         
         if self.cfg.flag_man_type == "alt":
             
-            obs = np.array([self.sat1.oe_ns[-1][1],
-                            self.sat1.roe[-1][1]/1e3,
-                            self.sat1.roe[-1][0],
-                            self.sat1.roe[-1][2]/1e2,
-                            self.sat1.roe[-1][3]/1e2])
+            obs = np.array([
+                self.sat1.oe_ns[-1][1],
+                self.sat1.roe[-1][1]/1e3,
+                self.sat1.roe[-1][0],
+                self.sat1.roe[-1][2]/1e2,
+                self.sat1.roe[-1][3]/1e2])
             
             self.obs_shape = len(obs)
             
@@ -89,9 +90,11 @@ class RoeGym(gym.Env):
             
         if self.cfg.flag_man_type == "act":
             
-            obs = np.array([self.sat1.oe_ns[-1][1],
-                                    self.sat1.roe[-1][4]/1e3, 
-                                    self.sat1.roe[-1][5]/1e3])
+            obs = np.array([
+                self.sat1.oe_ns[-1][1],
+                self.sat1.roe[-1][4]/1e3, 
+                self.sat1.roe[-1][5]/1e3
+                ])
             
             self.obs_shape = len(obs)
             

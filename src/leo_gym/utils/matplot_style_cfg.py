@@ -17,7 +17,7 @@ from IPython.display import display, HTML
 # ))
 
 # plt.style.use(['science','ieee','high-vis'])
-plt.style.use(['science','ggplot'])
+plt.style.use(['science','bmh'])
 
 plt.rcParams['figure.dpi'] = 600
 

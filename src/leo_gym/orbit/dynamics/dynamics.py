@@ -2,17 +2,35 @@
 import os
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
+import re 
 
 # Third-party
 import numpy as np
 import spiceypy as spice
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Local
 from leo_gym.orbit.dynamics.propagators import PropagatorModels
 
 np.seterr(invalid='ignore')
+
+
+
+def parse_np_array(s: str):
+    s = s.replace("[", " ").replace("]", " ")
+    s = s.replace("\n", " ")
+    s = s.replace("...", "nan")
+
+    nums = re.split(r"\s+", s)
+    out = []
+    for x in nums:
+        if x.strip() == "":
+            continue
+        out.append(float(x))
+
+    return np.array(out)
 
 class DynamicsConfig(BaseModel):
     """
@@ -63,6 +81,15 @@ class DynamicsConfig(BaseModel):
     AU: float = Field(default=149597870699.999988, description="Astronomical unit [m]")
     c_light: float = Field(default=299792457.999999984, description="Speed of light [m/s]")
     j2: float = Field(default=0.00108263, description="Earth’s J2 coefficient")
+    
+    
+    @field_validator("Cnm", "Snm", mode="before")
+    def parse_matrix(cls, v):
+        if isinstance(v, str):
+            return parse_np_array(v)     
+        return v
+    
+
 
 
 class Dynamics():

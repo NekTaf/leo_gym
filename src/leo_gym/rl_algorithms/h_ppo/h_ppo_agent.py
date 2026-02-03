@@ -18,34 +18,42 @@ from leo_gym.rl_algorithms.h_ppo.actor_critic_nets import (
     ValueNetwork,
 )
 from leo_gym.rl_algorithms.h_ppo.buffer import TrajectoryBuffer
-from leo_gym.rl_algorithms.h_ppo.config import PPOConfig
+from leo_gym.rl_algorithms.h_ppo.config import PPOConfig, TrainingConfig
 from leo_gym.rl_algorithms.h_ppo.logger import MLflowLogger
 from leo_gym.rl_algorithms.h_ppo.losses import (
     ActorLoss,
     CriticLoss,
 )
 from textwrap import dedent
-
+from pydantic import BaseModel
+from pathlib import Path
 
 class Agent:
 
-    def __init__(self, 
-                 env_obs, 
-                 env_actions, 
-                 env_cfg,
-                 ppo_cfg: PPOConfig,
-                 ):
+    def __init__(
+        self, 
+        env_obs, 
+        env_actions, 
+        #  env_cfg,
+        ppo_cfg: PPOConfig | str | Path,
+        policy_file_path:str|Path|None=None,
+        critic_file_path:str|Path|None=None,
+        train:bool=False,
+        device:str|None = None,
+        ):
         
-        self.ppo_cfg = ppo_cfg
-        self.lr = ppo_cfg.lr
-        self.env_cfg = env_cfg
+        self.load_cfg(ppo_cfg)        
+        
+        if device is not None:
+            self.device = device
+        else:
+            self.device = T.device(self.ppo_cfg.device)
 
         # Whether to normalize advantage 
         self.normalize_advantage = getattr(self.ppo_cfg, "normalize_advantage", False)
 
         # Entropy coefficient (learnable) 
         init_log_ent = T.log(T.tensor(self.ppo_cfg.init_entropy_coef))
-        self.log_ent_coef = nn.Parameter(init_log_ent)
 
         # Logger 
         if self.ppo_cfg.log_to_mlflow:
@@ -54,6 +62,8 @@ class Agent:
             self.logger = None
 
         action_type = []
+        # default continuous action size if no continuous actions are present
+        self.cont_act_size = 0
         for name, space in env_actions.spaces.items():
             if isinstance(space, gym.spaces.Box):
                 action_type.append(["continuous", space.shape[0]])
@@ -63,24 +73,26 @@ class Agent:
                 self.la = T.tensor(space.low, dtype=T.float32)
             elif isinstance(space, gym.spaces.Discrete):
                 action_type.append(["discrete", space.n])
-
-        self.device = T.device(self.ppo_cfg.device)
+                        
+        # move entropy coef to device
+        self.log_ent_coef = nn.Parameter(init_log_ent.to(self.device))
     
         self.policy_net = self.ppo_cfg.policy_wrapper(
-            activation_fun=self.ppo_cfg.activation_fun,
             state_dim=env_obs.shape[0],
+            lr=3e-4,
             action_type=action_type,
-            lr=self.ppo_cfg.lr,
             device=self.device,
-            cont_act_size=self.cont_act_size,
-            std_0=self.ppo_cfg.init_std,
-            observation_encoder=self.ppo_cfg.observation_encoder
+            continuous_dist_cls=self.ppo_cfg.continuous_dist_cls,
+            std_0=0.5,
+            net_arch=self.ppo_cfg.net_arch,
+            observation_encoder=self.ppo_cfg.observation_encoder,
         )
 
         self.value_net = self.ppo_cfg.critic_wrapper(
             state_dim=env_obs.shape[0],
             device=self.device,
             lr=self.ppo_cfg.lr,
+            net_arch=self.ppo_cfg.net_arch,
             observation_encoder=self.ppo_cfg.observation_encoder
         )
 
@@ -91,6 +103,12 @@ class Agent:
                 "params": [self.log_ent_coef],
                 "lr": self.ppo_cfg.lr,
             }
+        )
+        
+        self.load_trained_networks(
+            train=train,
+            policy_file_path=policy_file_path,
+            critic_file_path=critic_file_path
         )
 
         # Rollout Buffer
@@ -188,26 +206,32 @@ class Agent:
         if gamma is None:
             gamma = self.ppo_cfg.gamma
         
-        gamma_arr = gamma**t_soujourn_arr
-        advantage = np.zeros((len(reward_arr), self.ppo_cfg.n_envs), dtype=np.float32)
+        gamma_arr = gamma ** t_soujourn_arr
 
-        for t in range(len(reward_arr) - 1):
-            discount = 1.0
-            a_t = 0.0
-            for k in range(t, len(reward_arr) - 1):
-                mask = (1 - dones_arr[k].astype(np.int32))  
+        T_steps = len(reward_arr)
+        n_envs = self.ppo_cfg.n_envs
+        advantage = np.zeros((T_steps, n_envs), dtype=np.float32)
 
-                delta = (
-                    reward_arr[k]
-                    + gamma_arr[k] * vals_arr[k + 1] * mask
-                    - vals_arr[k]
-                )
-                a_t += discount * delta
+        # standard reversed GAE computation, handle per-env dones
+        last_adv = np.zeros(n_envs, dtype=np.float32)
+        for t in reversed(range(T_steps)):
+            mask = 1.0 - dones_arr[t].astype(np.float32)
 
-                discount *= gamma_arr[k] * gae_lambda * mask
+            # next value: use 0 for bootstrap at final step (if episode done)
+            if t + 1 < T_steps:
+                next_values = vals_arr[t + 1]
+            else:
+                next_values = np.zeros(n_envs, dtype=np.float32)
 
-            advantage[t] = a_t
-                    
+            delta = (
+                reward_arr[t]
+                + gamma_arr[t] * next_values * mask
+                - vals_arr[t]
+            )
+
+            last_adv = delta + gamma_arr[t] * gae_lambda * mask * last_adv
+            advantage[t] = last_adv
+
         return T.tensor(advantage).to(self.device)
 
 
@@ -331,15 +355,16 @@ class Agent:
                 plot_policy_loss_total.append(actor_plot_data['total_actor_loss'])
                 plot_value_loss.append(value_plot_data['critic_loss'])
 
-        self.logger.log_scalar("train/actor_loss_dis", np.mean(plot_policy_loss_dis), timesteps_so_far)
-        self.logger.log_scalar("train/actor_loss_cont", np.mean(plot_policy_loss_cont), timesteps_so_far)
-        self.logger.log_scalar("train/total_actor_loss", np.mean(plot_policy_loss_total), timesteps_so_far)
-        self.logger.log_scalar("train/critic_loss", np.mean(plot_value_loss), timesteps_so_far)
-        self.logger.log_scalar("train/entropy_loss x entropy_coef dis", np.mean(plot_entr_dis), timesteps_so_far)
-        self.logger.log_scalar("train/approx_kl dis", np.mean(plot_kl_dis), timesteps_so_far)
-        self.logger.log_scalar("train/entropy_loss x entropy_coef cont", np.mean(plot_entr_cont), timesteps_so_far)
-        self.logger.log_scalar("train/approx_kl cont", np.mean(plot_kl_cont), timesteps_so_far)
-        self.logger.log_scalar("train/entropy_coef",T.exp(self.log_ent_coef).item(),timesteps_so_far)
+        if self.logger:
+            self.logger.log_scalar("train/actor_loss_dis", float(np.mean(plot_policy_loss_dis)), timesteps_so_far)
+            self.logger.log_scalar("train/actor_loss_cont", float(np.mean(plot_policy_loss_cont)), timesteps_so_far)
+            self.logger.log_scalar("train/total_actor_loss", float(np.mean(plot_policy_loss_total)), timesteps_so_far)
+            self.logger.log_scalar("train/critic_loss", float(np.mean(plot_value_loss)), timesteps_so_far)
+            self.logger.log_scalar("train/entropy_loss x entropy_coef dis", float(np.mean(plot_entr_dis)), timesteps_so_far)
+            self.logger.log_scalar("train/approx_kl dis", float(np.mean(plot_kl_dis)), timesteps_so_far)
+            self.logger.log_scalar("train/entropy_loss x entropy_coef cont", float(np.mean(plot_entr_cont)), timesteps_so_far)
+            self.logger.log_scalar("train/approx_kl cont", float(np.mean(plot_kl_cont)), timesteps_so_far)
+            self.logger.log_scalar("train/entropy_coef", float(T.exp(self.log_ent_coef).item()), timesteps_so_far)
 
 
 
@@ -353,19 +378,39 @@ class Agent:
         self.value_net.save_checkpoint(directory_save)
 
 
-    def load_trained_networks(self, 
-                              train:bool,
-                              device:T.device,
-                              file_name_policy:str,
-                              file_name_critic:str,
-                              )->None:
+    def load_trained_networks(
+        self, 
+        train:bool=False,
+        policy_file_path:str|Path|None=None,
+        critic_file_path:str|Path|None=None,
+        )->None:
         
-        self.policy_net.load_checkpoint(file_name_policy,train,device)
-        self.value_net.load_checkpoint(file_name_critic,train,device)
+
+        if policy_file_path is not None:
+            self.policy_net.load_checkpoint(policy_file_path,train,self.device)
+
+        elif critic_file_path is not None:
+            self.value_net.load_checkpoint(critic_file_path,train,self.device)
+        
+        return
+        
+    def load_cfg(
+        self, 
+        ppo_cfg: PPOConfig|Path|str, 
+        )->None:
+        
+        try:
+            self.lr = ppo_cfg.lr
+            # self.env_cfg = env_cfg
+            self.ppo_cfg = ppo_cfg
+        except AttributeError:
+            self.ppo_cfg = PPOConfig.load_cfg_params_from_file(cfg_file_path=ppo_cfg)
+
+        return 
         
                     
         
-    def train(self,env, training_cfg):
+    def train(self,env:gym.Env, training_cfg:TrainingConfig, env_cfg:BaseModel)->None:
         
         try:
             # Experiment and run setup
@@ -376,14 +421,20 @@ class Agent:
             
             with mlflow.start_run(run_name=training_cfg.run_name) as run:
                 
-                mlflow.log_dict(self.env_cfg.model_dump(), 
-                                "env_cfg.json")
+                mlflow.log_dict(
+                    env_cfg.model_dump(), 
+                    "env_cfg.json"
+                    )
                 
-                mlflow.log_dict(self.ppo_cfg.model_dump(mode="python"), 
-                                "ppo_cfg.json")
+                mlflow.log_dict(
+                    self.ppo_cfg.model_dump(mode="python"), 
+                    "ppo_cfg.json"
+                    )
 
-                mlflow.log_dict(training_cfg.model_dump(), 
-                                "training_cfg.json")
+                mlflow.log_dict(
+                    training_cfg.model_dump(), 
+                    "training_cfg.json"
+                    )
                 
                 experiment_id = run.info.experiment_id
                 run_id = run.info.run_id
@@ -396,6 +447,7 @@ class Agent:
                 state, _ = env.reset(seed=None)
                 self.global_episode_count = 0
 
+                    
                 with tqdm(total=self.ppo_cfg.max_training_timesteps, desc="Training Progress") as pbar:
                     while self.timesteps_so_far <= self.ppo_cfg.max_training_timesteps:
 
@@ -408,7 +460,7 @@ class Agent:
                         next_state, reward, terminated, truncated, info = env.step(action)
                         sojourn_t = info["sojourn_t"]
 
-                        # Save to buffer
+                        # Process done/truncated flags and Save to buffer
                         self.rollout_buffer(
                             state,
                             action_dis,
@@ -421,12 +473,15 @@ class Agent:
                             sojourn_t
                         )
 
-                        self.timesteps_so_far += self.ppo_cfg.default_num_envs
-                        pbar.update(self.ppo_cfg.default_num_envs)
+                        self.timesteps_so_far += self.ppo_cfg.n_envs
+                        pbar.update(self.ppo_cfg.n_envs)
                         state = next_state
+
+                        # Update the original environment variable "training_steps" through all vectorized envs (for curriculum training)
+                        env.set_attr("training_steps", self.timesteps_so_far)
                         
                         # Call training
-                        if self.timesteps_so_far % (self.ppo_cfg.steps_per_env * self.ppo_cfg.default_num_envs) == 0:
+                        if self.timesteps_so_far % (self.ppo_cfg.steps_per_env * self.ppo_cfg.n_envs) == 0:
                             self.update(self.timesteps_so_far, total_timesteps=self.ppo_cfg.max_training_timesteps)
                             print(f"""
                                 ===========================================
@@ -438,16 +493,16 @@ class Agent:
 
                         mlflow.log_metric(
                             "rollout/sum_rewards",
-                            np.mean(env.return_queue),
+                            float(np.mean(env.return_queue)),
                             step=self.timesteps_so_far
                         )
                         mlflow.log_metric(
                             "rollout/episode_timesteps",
-                            np.mean(env.length_queue),
+                            float(np.mean(env.length_queue)),
                             step=self.timesteps_so_far
                         )
 
-                        if self.timesteps_so_far % self.ppo_cfg.save_nets_period == 0:
+                        if self.timesteps_so_far % (self.ppo_cfg.save_nets_period*self.ppo_cfg.batch_size) == 0:
                             directory_save = os.path.join(
                                 training_cfg.tracking_uri,
                                 experiment_id,
@@ -460,17 +515,25 @@ class Agent:
                             self.save_models(directory_save=directory_save)
                             
                             
-        except (KeyboardInterrupt, AttributeError):
+        except KeyboardInterrupt:
+            # allow graceful interrupt, don't swallow other exceptions
             pass
         
         # Save final models 
-        directory_save = os.path.join(
-            training_cfg.tracking_uri,
-            experiment_id,
-            run_id,
-            "artifacts/models",
-            "final"
-        )
+        if 'experiment_id' in locals() and 'run_id' in locals():
+            directory_save = os.path.join(
+                training_cfg.tracking_uri,
+                experiment_id,
+                run_id,
+                "artifacts/models",
+                "final"
+            )
+        else:
+            directory_save = os.path.join(
+                training_cfg.tracking_uri,
+                "artifacts/models",
+                "final"
+            )
         
         os.makedirs(directory_save, exist_ok=True)
         self.save_models(directory_save=directory_save)

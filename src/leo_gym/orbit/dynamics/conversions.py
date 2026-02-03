@@ -101,11 +101,13 @@ def rv_to_roe_and_nsoe(
     
     oe_kep_r = np.array(oe_kep_r).reshape(6,)
     
+    oe_kep_r[1] = zero2twopi(oe_kep_r[1])
     oe_kep_r[2] = zero2twopi(oe_kep_r[2])
     oe_kep_r[3] = zero2twopi(oe_kep_r[3])
     oe_kep_r[4] = zero2twopi(oe_kep_r[4])
     oe_kep_r[5] = zero2twopi(oe_kep_r[5])
 
+    oe_kep[1] = zero2twopi(oe_kep[1])
     oe_kep[2] = zero2twopi(oe_kep[2])
     oe_kep[3] = zero2twopi(oe_kep[3])
     oe_kep[4] = zero2twopi(oe_kep[4])
@@ -567,8 +569,9 @@ def Delta_roe_to_rv(
         oe_ns_ref[3],
         oe_ns_ref[4]]).reshape(6,)
 
+    Droe[0] = Droe[0]*oe_ns_ref[0]
+
     oe_ns_real = oe_ns_ref - Droe/oe_ns_ref[0]
-    
     
     oe_real = nonsingular_to_classical_oe(semi_major_axis=oe_ns_real[0],
                                           e_x=oe_ns_real[2],
