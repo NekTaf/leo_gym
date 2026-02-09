@@ -237,11 +237,11 @@ class SatDebrisCluster():
 
         return oe_ns
    
-    def get_projected_collision_metrics(self)->list[NDArray]:
+    def get_projected_collision_metrics(self)->list[Tuple[float, float, float, np.ndarray]]:
         """Propagate to TCA and return P_c max for each debris
         """
         primary_rvm:list[NDArray] = []        # Dummy variable, do not append to main 
-        object_collision_metrics:list[NDArray] = []      # Store mahala outputs 
+        object_collision_metrics:list[Tuple[float, float, float, np.ndarray]] = []      # Store mahala outputs 
         u = np.zeros(3)
 
         for i, (object_rvm) in enumerate((self.primary_sat_and_debris_rvm)):
@@ -435,7 +435,8 @@ class SatDebrisCluster():
         
     
     def plot_projected_position_bplane(self, save_path:str=None)->None:
-    
+        from shap.plots.colors._colors import red_blue, red_blue_circle, red_blue_no_bounds
+
         data = np.array(self.delta_r_b_plane).squeeze()
 
         # Separate columns
@@ -453,7 +454,7 @@ class SatDebrisCluster():
         scatter = plt.scatter(
             x, y,
             c=indices,
-            cmap='viridis',
+            cmap=red_blue_no_bounds,
             marker='o'
         )
 
@@ -464,7 +465,7 @@ class SatDebrisCluster():
 
         plt.xlabel(r'$\xi \mathrm{ (m)}$ ')
         plt.ylabel(r'$\zeta \mathrm{ (m)}$')
-        plt.title('Projected Position B-Plane')
+        plt.title('B-Plane')
         plt.colorbar(scatter, label='Episode step index')
         plt.show()
     

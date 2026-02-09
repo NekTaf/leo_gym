@@ -112,7 +112,7 @@ class CamEnv(gym.Env):
         adex = roe[-1][2]/1e2 # convert to km to normalize // range: 0 - -/+ 9
         adey = roe[-1][3]/1e2 # convert to km to normalize // range 0 - -/+ 9
         
-        l_p = non_singular_oe_p[1] # range 0 - 6 no need to normalize
+        u_p = non_singular_oe_p[1] # range 0 - 6 no need to normalize
         inc_p = non_singular_oe_p[4] # range 0 - 6 no need to normalize
         raan_p = non_singular_oe_p[5] #range 0 - 6 no need to normalize
 
@@ -121,7 +121,7 @@ class CamEnv(gym.Env):
 
             # Observations of primary satellite 
             obs_satellite = np.array((
-                l_p,
+                u_p,
                 inc_p,
                 raan_p,
                 adl,
@@ -131,7 +131,7 @@ class CamEnv(gym.Env):
             obs_debris = np.zeros((self.DebrisSwarm_1.no_debris,2))
 
             obs_satellite = np.array([
-                l_p,
+                u_p,
                 adl,
                 adex,
                 adey])        
@@ -194,7 +194,7 @@ class CamEnv(gym.Env):
                 # Convert from minutes to hours
                 tca_till = tca_till/60 
 
-                l_s = np.array([nsoe[1]]) # range 0 - 6 no need to normalize
+                u_s = np.array([nsoe[1]]) # range 0 - 6 no need to normalize
                 inc_s = np.array([nsoe[4]]) # range 0 - 6 no need to normalize
                 raan_s = np.array([nsoe[5]]) # range 0 - 6 no need to normalize
                 
@@ -202,7 +202,7 @@ class CamEnv(gym.Env):
                 delta_r_b = delta_r_b/5e2
                 if not self.cfg.reduced_obs:
                     obs_debris[i,:] = np.concatenate((
-                        l_s,
+                        u_s,
                         inc_s,
                         raan_s,
                         tca_till,
@@ -463,7 +463,7 @@ class CamEnv(gym.Env):
         return
     
     
-    def plot_roe_states(self, save_path:str|Path|None)->None:
+    def publication_ready_plots(self, save_path:str|Path|None)->None:
         
         roe = np.array(self.DebrisSwarm_1.roe)
 
@@ -471,7 +471,7 @@ class CamEnv(gym.Env):
         adl = roe[:,1]
         ade = np.sqrt(roe[:,2]**2 + roe[:,3]**2)
 
-        fig, axs = plt.subplots(2, 1, sharex=True,figsize=(9, 5))
+        fig, axs = plt.subplots(2, 1, sharex=True,figsize=(5, 3.5))
 
         axs[0].plot(adl)
         axs[0].axhline(self.cfg.adl_req,label=r"$|a \delta \lambda|_\mathrm{req}$ (m)",
@@ -491,7 +491,7 @@ class CamEnv(gym.Env):
         axs[1].legend()
         
         # Radial thrust plot
-        fig4, ax = plt.subplots(figsize=(9, 2))
+        fig4, ax = plt.subplots(figsize=(5, 2))
 
         rtn = np.asarray(self.DebrisSwarm_1.controls_RTN)
         ax.plot(rtn[:, 0])
@@ -503,13 +503,13 @@ class CamEnv(gym.Env):
 
         
         # Projected probability plot
-        fig3, ax = plt.subplots(figsize=(9, 2))
+        fig3, ax = plt.subplots(figsize=(5, 2))
         
         pmax = np.array(self.DebrisSwarm_1.p_max_predictions)
         times_full = np.array(self.DebrisSwarm_1.manaplan_call_relative_time)
         times = times_full / 60
         n = min(times.size, pmax.size)
-        ax.scatter(times[:n], np.log10(pmax[:n]), s=10)
+        ax.scatter(times[:n], np.log10(pmax[:n]), s=20)
 
         ax.axhline(np.log10(self.cfg.p_max_limit), label=r"$\log_{10}(P^\mathrm{max}_{c,\mathrm{req}})$",
                    color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
@@ -524,6 +524,13 @@ class CamEnv(gym.Env):
         # 3D Plot
         fig2 = plt.figure(figsize=(4.5, 4.5), constrained_layout=True)
         ax = fig2.add_subplot(111, projection="3d")
+        
+        fig2.patch.set_facecolor("white")
+        ax.xaxis.set_pane_color((0.92,0.92,0.92,1))
+        ax.yaxis.set_pane_color((0.92,0.92,0.92,1))
+        ax.zaxis.set_pane_color((0.92,0.92,0.92,1))
+        ax.patch.set_facecolor("none")
+
 
         rvm_total = np.array(self.DebrisSwarm_1.primary_sat_and_debris_rvm)
 
@@ -551,15 +558,18 @@ class CamEnv(gym.Env):
         
         
         # firing 3D plot
-        
-        
-        
-        
+
         N = 110
         arrow_len = 1e6
 
-        fig = plt.figure(figsize=(4.5, 4.5), constrained_layout=True)
-        ax = fig.add_subplot(111, projection="3d")
+        fig7 = plt.figure(figsize=(4.5, 4.5), constrained_layout=True)
+        ax = fig7.add_subplot(111, projection="3d")
+        
+        fig7.patch.set_facecolor("white")
+        ax.xaxis.pane.set_facecolor((0.92,0.92,0.92,1))
+        ax.yaxis.pane.set_facecolor((0.92,0.92,0.92,1))
+        ax.zaxis.pane.set_facecolor((0.92,0.92,0.92,1))
+        ax.patch.set_facecolor("none")
 
         ax.scatter(prim[:N,0], prim[:N,1], prim[:N,2], s=4)
 
@@ -570,14 +580,17 @@ class CamEnv(gym.Env):
 
         ax.quiver(
             prim[:N,0], prim[:N,1], prim[:N,2],
-            radial_vecs[:,0], radial_vecs[:,1], radial_vecs[:,2]
+            radial_vecs[:,0], radial_vecs[:,1], radial_vecs[:,2],
+            color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
         )
-
+        
+        
+        
         ax.set_xlabel("$X$ (m)")
         ax.set_ylabel("$Y$ (m)")
         ax.set_zlabel("$Z$ (m)")
         ax.view_init(elev=30, azim=45)
-        
+
         ax.set_box_aspect(None, zoom=0.80)       
         ax.grid(False)
 

@@ -42,23 +42,10 @@ args = parser.parse_args()
 
 experiment_path = Path(args.exp_path)
 policy_timestep = Path(args.policy_timestep)
-actor_file_path = experiment_path / "artifacts/models" / policy_timestep / "policynet.pth"
+policy_file_path = experiment_path / "artifacts/models" / policy_timestep / "policynet.pth"
 critic_file_path = experiment_path / "artifacts/models" / policy_timestep / "valuenet.pth"    
     
-with open(experiment_path / "artifacts/env_cfg.json") as f:
-    data = json.load(f)
-
-with open(experiment_path / "artifacts/ppo_cfg.json", "r") as f:
-    cfg_kwargs = json.load(f)
-   
-
-text = (experiment_path / "artifacts/ppo_cfg.json").read_text()
-text = re.sub(r"""\"<class '([^']+)'>\"""", r'"\1"', text)
-cfg_kwargs = json.loads(text)
-
-ppo_cfg = PPOConfig(**cfg_kwargs)
-
-ppo_cfg = ppo_cfg.model_copy(update={"device": "cpu"})
+ppo_cfg = experiment_path / "artifacts/ppo_cfg.json"
 
 #Make Environment 
 def make_env():
@@ -67,17 +54,17 @@ def make_env():
 
 # Prepare Agent 
 env = make_env()
-ppo = Agent(env_obs=env.observation_space, 
-            env_actions=env.action_space, 
-            ppo_cfg=ppo_cfg, 
-            env_cfg=env_cfg)
 
-ppo.load_trained_networks(
+ppo = Agent(
+    env_obs=env.observation_space,
+    env_actions=env.action_space,
+    ppo_cfg=ppo_cfg,
     train=False,
-    device=torch.device("cpu"),
-    file_name_policy=actor_file_path,
-    file_name_critic=critic_file_path
+    policy_file_path=policy_file_path,
+    critic_file_path=critic_file_path,
+    device='cpu'
 )
+
 
 # Distributed Process Initializer 
 def init_process(rank, size, fn, data_dir, seed, backend='gloo'):
@@ -140,20 +127,17 @@ if __name__ == '__main__':
     usages = psutil.cpu_percent(percpu=True, interval=1)
     free_cpus = sum(1 for u in usages)
 
-    # size = 100
-    size = free_cpus
+    size = 100
+    # size = free_cpus
     seeds = [random.randint(0, 2**32 - 1) for _ in range(size)]
     
-    
-    # temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp")
-    # os.makedirs(temp_dir, exist_ok=True)
-    # os.chdir(temp_dir)
     try:
-        os.mkdir(experiment_path / "artifacts/models" / policy_timestep / "artifacts/monte_carlos")
+        os.mkdir(experiment_path / "artifacts/models" / policy_timestep)
     except FileExistsError:
         pass
-    os.chdir(experiment_path / "artifacts/models" / policy_timestep / "artifacts/monte_carlos")
-    data_dir = create_dir("cam")
+    
+    os.chdir(experiment_path / "artifacts/models" / policy_timestep)
+    data_dir = create_dir("monte_carlo_cam")
     data_dir = os.path.abspath(data_dir)
     os.chdir(data_dir)
 
@@ -165,8 +149,6 @@ if __name__ == '__main__':
                'reward', 
                'terminated',
                'truncated']
-    
-           
     
     pd.DataFrame([headers]).to_csv('mc_cam_results.csv', index=False, header=False)
     mp.set_start_method("spawn", force=True)
