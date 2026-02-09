@@ -1,0 +1,6 @@
+{
+  "tracking_uri": "/home/nektaf/mlruns",
+  "experiment_name": "cam_shap_journal_2",
+  "run_name": "full_obs_improoved_traj_generation",
+  "seed": 70
+}
