@@ -1,0 +1,7 @@
+
+# Use a custom diff driver for Jupyter notebooks
+*.ipynb diff=jupyternotebook
+*.ipynb	merge=jupyternotebook
+
+# Strip Jupyter notebook outputs on commit
+*.ipynb filter=nbstripout

@@ -32,7 +32,9 @@ dependencies = [
   "stable-baselines3[extra]",
   "ipython==8.12.3",
   "ipykernel",
-  "nbformat>=4.2.0"
+  "nbformat>=4.2.0",
+  "nbstripout",
+  "nbdime",
 ]
 
 

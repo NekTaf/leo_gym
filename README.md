@@ -27,8 +27,10 @@ It is recommended to first create a virtual environment. Then clone and install 
 
 ```bash 
 git clone https://github.com/NekTaf/leo_gym.git
- cd leo_gym
- pip install -e .
+cd leo_gym
+pip install -e .
+nbstripout --install
+nbdime config-git --enable
 ```
 
 Alternatively, install directly from GitHub:
