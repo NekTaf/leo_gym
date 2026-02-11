@@ -13,7 +13,6 @@ from leo_gym.rl_algorithms.utils.utils import (
     save_checkpoint,
 )
 
-
 class ObservationEncoder(nn.Module):
     def __init__(self,
                  obs_dim: int,
@@ -82,15 +81,9 @@ class PolicyNetwork(nn.Module):
 
         # figure out continuous action size from action_type
         cont_act_size = None
-        disc_act_size = None
         for act_type, act_size in self.action_type:
             if act_type == "continuous":
                 cont_act_size = act_size
-            elif act_type == "discrete":
-                disc_act_size = act_size
-
-        assert cont_act_size is not None, "action_type must contain a 'continuous' entry."
-        assert disc_act_size is not None, "action_type must contain a 'discrete' entry."
 
         # continuous + discrete heads (hybrid)
         self.mu = None
@@ -98,12 +91,11 @@ class PolicyNetwork(nn.Module):
         self.actions = None
 
         self.std_0 = T.as_tensor(std_0, dtype=T.float32)
-        action_size = cont_act_size
 
         if self.std_0.dim() == 0:
-            self.std_0 = T.full((action_size,), self.std_0.item(), dtype=T.float32)
-        assert self.std_0.shape[0] == action_size, \
-            f"Length of std_0 ({self.std_0.shape[0]}) must match continuous action size ({action_size})."
+            self.std_0 = T.full((cont_act_size,), self.std_0.item(), dtype=T.float32)
+        assert self.std_0.shape[0] == cont_act_size, \
+            f"Length of std_0 ({self.std_0.shape[0]}) must match continuous action size ({cont_act_size})."
         log_std_0 = self.std_0.log()
 
         for act_type, act_size in self.action_type:

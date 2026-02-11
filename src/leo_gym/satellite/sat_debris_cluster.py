@@ -244,9 +244,9 @@ class SatDebrisCluster():
         object_collision_metrics:list[Tuple[float, float, float, np.ndarray]] = []      # Store mahala outputs 
         u = np.zeros(3)
 
-        for i, (object_rvm) in enumerate((self.primary_sat_and_debris_rvm)):
+        for i, (object_rvm) in enumerate((self.sat_debris_rvm)):
             if i == 0:
-                primary_rvm.append(self.primary_sat_and_debris_rvm[0][-1])
+                primary_rvm.append(self.sat_debris_rvm[0][-1])
                 max_time_till_tca = np.max(np.array(self.conjuction_points_time)-self.n) + 1
                 
                 for _ in range(max_time_till_tca):
@@ -302,9 +302,9 @@ class SatDebrisCluster():
         self.C_eci_combined = []
         
         for i, (object_rvm,object_mahala,object_bplane,nsoe) in enumerate(
-            zip(self.primary_sat_and_debris_rvm,
-                self.primary_sat_and_debris_mahala,
-                self.primary_sat_and_debris_b_plane,
+            zip(self.sat_debris_rvm,
+                self.sat_debris_mahala,
+                self.sat_debris_b_plane,
                 self.non_singular_oe)):
             
             # Apply control only to primary satellite
@@ -316,12 +316,12 @@ class SatDebrisCluster():
                 x=np.array(object_rvm[-1]),
                 u=u,t=self.t[self.n],dt=self.cfg.dt))  
             
-            rv_p = np.array(self.primary_sat_and_debris_rvm[0][-1][:6]).reshape(-1) #primary satellite rvm
+            rv_p = np.array(self.sat_debris_rvm[0][-1][:6]).reshape(-1) #primary satellite rvm
             rv_s = np.array(object_rvm[-1][:6]).reshape(-1) #secondary object rvm
 
             # Object bplane params
             object_bplane.append(delta_r_eci_2_rb(
-                np.array(self.primary_sat_and_debris_rvm[0][-1][:6]).reshape(-1),
+                np.array(self.sat_debris_rvm[0][-1][:6]).reshape(-1),
                 np.array(object_rvm[-1][:6]).reshape(-1)))
             
             # Secondary debris object non-singular params
@@ -360,7 +360,7 @@ class SatDebrisCluster():
             t=self.t[self.n],
             dt=self.cfg.dt))             
 
-        roe, oe, oe_ref = rv_to_roe_and_nsoe(np.array(self.primary_sat_and_debris_rvm[0][-1][:6]), 
+        roe, oe, oe_ref = rv_to_roe_and_nsoe(np.array(self.sat_debris_rvm[0][-1][:6]), 
                                             np.array(self.ideal_traj_rvm[-1][:6]))
         self.roe.append(roe)
         self.oe_ns.append(oe)
@@ -384,10 +384,11 @@ class SatDebrisCluster():
                 P_max_product = 0
             
             self.p_max_predictions.append(P_max_product)
-            self.delta_r_b_plane.append(np.array([
-                metrics_at_tca[:,3],
-                metrics_at_tca[:,4]
-                ]))
+            for i in range(self.no_debris):
+                self.delta_r_b_plane[i].append(np.column_stack((
+                    metrics_at_tca[i, 3],
+                    metrics_at_tca[i, 4]
+                )))
             
         except IndexError: # No more debris objects left
             self.p_max_predictions.append(0)
@@ -437,37 +438,39 @@ class SatDebrisCluster():
     def plot_projected_position_bplane(self, save_path:str=None)->None:
         from shap.plots.colors._colors import red_blue, red_blue_circle, red_blue_no_bounds
 
-        data = np.array(self.delta_r_b_plane).squeeze()
+        for i in range(self.no_debris):
+            
+            data = np.array(self.delta_r_b_plane[i]).squeeze(1)
 
-        # Separate columns
-        x = data[:, 0]
-        y = data[:, 1]
-        indices = np.arange(len(data))
+            # Separate columns
+            x = data[..., 0]
+            y = data[..., 1]
+            indices = np.arange(len(data))
 
-        # Filter out 0,0
-        mask = ~((x == 0) & (y == 0))
-        x = x[mask]
-        y = y[mask]
-        indices = indices[mask]
+            # Filter out 0,0
+            mask = ~((x == 0) & (y == 0))
+            x = x[mask]
+            y = y[mask]
+            indices = indices[mask]
 
-        plt.figure(figsize=(4,4))
-        scatter = plt.scatter(
-            x, y,
-            c=indices,
-            cmap=red_blue_no_bounds,
-            marker='o'
-        )
+            plt.figure(figsize=(4,4))
+            scatter = plt.scatter(
+                x, y,
+                c=indices,
+                cmap=red_blue_no_bounds,
+                marker='o'
+            )
 
-        lim = np.max(np.abs(np.concatenate([x, y])))+500
-        plt.xlim(-lim, lim)
-        plt.ylim(-lim, lim)
-        plt.gca().set_aspect('equal', 'box')
+            lim = np.max(np.abs(np.concatenate([x, y])))+500
+            plt.xlim(-lim, lim)
+            plt.ylim(-lim, lim)
+            plt.gca().set_aspect('equal', 'box')
 
-        plt.xlabel(r'$\xi \mathrm{ (m)}$ ')
-        plt.ylabel(r'$\zeta \mathrm{ (m)}$')
-        plt.title('B-Plane')
-        plt.colorbar(scatter, label='Episode step index')
-        plt.show()
+            plt.xlabel(r'$\xi \mathrm{ (m)}$ ')
+            plt.ylabel(r'$\zeta \mathrm{ (m)}$')
+            plt.title('B-Plane')
+            plt.colorbar(scatter, label='Episode step index')
+            plt.show()
     
         return
     
@@ -482,7 +485,6 @@ class SatDebrisCluster():
         self.roe:list = [] # Relative orbital elements primary-reference trajectory 
         self.oe_ns:list = [] # non-singular orbital elements of all objects
         self.p_max_predictions:list = [] # Maximum collision probabilities
-        self.delta_r_b_plane:list = [] # Collision distance on the B-plane
         self.controls_RTN:list = [] # Thrusts in RTN frame each simulation timestep  
         self.manplans:list = [] # Maneuver plans used
         self.manaplan_call_relative_time:list = [] # Maneuver plan starting times at relative to start of simulaiton (stepxdt sec)
@@ -497,10 +499,11 @@ class SatDebrisCluster():
         self.init_ideal_traj()
         
         # initialize satellite and derbis lists  
-        self.primary_sat_and_debris_rvm = [ [] for _ in range(self.no_debris+1)]
-        self.primary_sat_and_debris_mahala = [ [] for _ in range(self.no_debris+1)]
-        self.primary_sat_and_debris_b_plane = [ [] for _ in range(self.no_debris+1)]
+        self.sat_debris_rvm = [ [] for _ in range(self.no_debris+1)]
+        self.sat_debris_mahala = [ [] for _ in range(self.no_debris+1)]
+        self.sat_debris_b_plane = [ [] for _ in range(self.no_debris+1)]
         self.non_singular_oe = [ [] for _ in range(self.no_debris+1)]
+        self.delta_r_b_plane = [ [] for _ in range(self.no_debris+1)] # Collision distance on the B-plane
 
         for i, (
             object_rvm,
@@ -510,9 +513,9 @@ class SatDebrisCluster():
             nsoe
             ) in enumerate(
                     zip(
-                        self.primary_sat_and_debris_rvm,
-                        self.primary_sat_and_debris_mahala,
-                        self.primary_sat_and_debris_b_plane,
+                        self.sat_debris_rvm,
+                        self.sat_debris_mahala,
+                        self.sat_debris_b_plane,
                         self.all_object_rvm0, 
                         self.non_singular_oe
                         )):
@@ -568,7 +571,7 @@ class SatDebrisCluster():
         p_max_predictions = np.array(self.p_max_predictions)
         delta_r_b_plane = np.array(self.delta_r_b_plane)
         roe = np.array(self.roe)
-        primary_sat_and_debris_rvm = np.array(self.primary_sat_and_debris_rvm)
+        primary_sat_and_debris_rvm = np.array(self.sat_debris_rvm)
         oe_ns = np.array(self.oe_ns)
 
         pd.DataFrame(thrust_rtn).to_csv(os.path.join(path,'thrust_rtn.csv'), index=False, header=thrust_cols)

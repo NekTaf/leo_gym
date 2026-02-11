@@ -80,7 +80,7 @@ class CamEnv(gym.Env):
                                        shape=(2,), 
                                        dtype=np.float64)
         })
-        
+                    
         if self.cfg.reduced_obs:
             self.observation_space = spaces.Box(
                 low=-np.inf,
@@ -92,9 +92,11 @@ class CamEnv(gym.Env):
             self.observation_space = spaces.Box(
                 low=-np.inf,
                 high=np.inf,
-                shape=(15,),
+                shape=(int(6+self.cfg.debris_cluster_config.max_debris*9),),
                 dtype=np.float64
             )
+                
+        
 
                         
     
@@ -117,7 +119,7 @@ class CamEnv(gym.Env):
         raan_p = non_singular_oe_p[5] #range 0 - 6 no need to normalize
 
         if not self.cfg.reduced_obs:
-            obs_debris = np.zeros((self.DebrisSwarm_1.no_debris,9))
+            obs_debris = np.zeros((self.DebrisSwarm_1.cfg.max_debris,9))
 
             # Observations of primary satellite 
             obs_satellite = np.array((
@@ -198,8 +200,9 @@ class CamEnv(gym.Env):
                 inc_s = np.array([nsoe[4]]) # range 0 - 6 no need to normalize
                 raan_s = np.array([nsoe[5]]) # range 0 - 6 no need to normalize
                 
-                delta_r_b = np.array(self.DebrisSwarm_1.delta_r_b_plane[-1]).reshape(2,)
+                delta_r_b = np.array(self.DebrisSwarm_1.delta_r_b_plane[i][-1]).reshape(2,)
                 delta_r_b = delta_r_b/5e2
+                
                 if not self.cfg.reduced_obs:
                     obs_debris[i,:] = np.concatenate((
                         u_s,
@@ -217,7 +220,7 @@ class CamEnv(gym.Env):
                         ), axis=0)
 
         obs_debris = np.array(obs_debris)
-                        
+        
         obs = np.concatenate([obs_satellite.ravel(), obs_debris.ravel()], axis=0)
         
         return obs
@@ -243,7 +246,7 @@ class CamEnv(gym.Env):
             for i in range(self.DebrisSwarm_1.no_debris):
                 try:
                     conjuction_time = self.DebrisSwarm_1.conjuction_points_time[i]
-                    p_max = self.DebrisSwarm_1.primary_sat_and_debris_mahala[1+i][conjuction_time][1] 
+                    p_max = self.DebrisSwarm_1.sat_debris_mahala[1+i][conjuction_time][1] 
                     
                     if p_max>=self.cfg.p_max_limit: # Propagation index
                         reward = -100
@@ -430,7 +433,7 @@ class CamEnv(gym.Env):
 
         fig.update_xaxes(title_text="Discrete Time", row=6, col=1)
 
-        for space_object in self.DebrisSwarm_1.primary_sat_and_debris_rvm:
+        for space_object in self.DebrisSwarm_1.sat_debris_rvm:
             coords = np.array(space_object)
             fig.add_trace(
                 go.Scatter3d(
@@ -461,6 +464,60 @@ class CamEnv(gym.Env):
         
         
         return
+    
+    
+    def plot_interactive_collision_close_up(self):
+
+        fig = go.Figure()
+
+        for i in range(self.DebrisSwarm_1.no_debris):
+            states = np.array(self.DebrisSwarm_1.sat_debris_rvm)
+
+            x = states[0][self.DebrisSwarm_1.conjuction_points_time[i]-10:self.DebrisSwarm_1.conjuction_points_time[i]+10, 0]
+            y = states[0][self.DebrisSwarm_1.conjuction_points_time[i]-10:self.DebrisSwarm_1.conjuction_points_time[i]+10, 1]
+            z = states[0][self.DebrisSwarm_1.conjuction_points_time[i]-10:self.DebrisSwarm_1.conjuction_points_time[i]+10, 2]
+            
+            
+            x_deb = states[i+1][self.DebrisSwarm_1.conjuction_points_time[i]-10:self.DebrisSwarm_1.conjuction_points_time[i]+10, 0]
+            y_deb = states[i+1][self.DebrisSwarm_1.conjuction_points_time[i]-10:self.DebrisSwarm_1.conjuction_points_time[i]+10, 1]
+            z_deb = states[i+1][self.DebrisSwarm_1.conjuction_points_time[i]-10:self.DebrisSwarm_1.conjuction_points_time[i]+10, 2]
+
+            
+            if i != 0:
+                color = "red"
+            else:
+                color = None
+
+            fig.add_trace(go.Scatter3d(x=x, y=y, z=z,  marker=dict(color="blue")))
+            fig.add_trace(go.Scatter3d(x=x_deb, y=y_deb, z=z_deb,  marker=dict(color="red")))
+
+            radius = 2.5e5
+
+            conjuction_point=self.DebrisSwarm_1.sat_debris_rvm[0][self.DebrisSwarm_1.conjuction_points_time[i]]
+
+            x = conjuction_point[0]
+            y = conjuction_point[1]
+            z = conjuction_point[2]
+
+            phi, theta = np.mgrid[0:2 * np.pi:30j, 0:np.pi:20j]
+
+            xx = radius*np.cos(theta)*np.sin(phi) + x
+            yy = radius*np.sin(theta)*np.sin(phi) + y
+            zz = radius*np.cos(phi) + z
+
+            fig.add_trace(go.Surface(x=xx, y=yy, z=zz, opacity=0.4, showscale=False, colorscale=[[0, 'gray'], [1, 'gray']]))
+
+        fig.update_layout(scene=dict(
+                            xaxis_title='X',
+                            yaxis_title='Y',
+                            zaxis_title='Z',
+                            aspectmode='data'),
+                            width=800*1.2, height=800)
+
+        fig.update_layout(scene_camera=dict(eye=dict(x=-1.25, y=-1.25, z=0.7)))
+
+        fig.show()
+        
     
     
     def publication_ready_plots(self, save_path:str|Path|None)->None:
@@ -532,19 +589,19 @@ class CamEnv(gym.Env):
         ax.patch.set_facecolor("none")
 
 
-        rvm_total = np.array(self.DebrisSwarm_1.primary_sat_and_debris_rvm)
+        rvm_total = np.array(self.DebrisSwarm_1.sat_debris_rvm)
 
         prim = rvm_total[0]
-        sec  = rvm_total[1]
-        cp   = self.DebrisSwarm_1.conjuction_time
-        
-        x_cp, y_cp, z_cp = sec[cp, :3]
-        ax.scatter(x_cp, y_cp, z_cp, s=5, label="Conjunction Point", color=plt.rcParams["axes.prop_cycle"].by_key()["color"][2])
-        ax.scatter(x_cp, y_cp, z_cp, s=80, color=plt.rcParams["axes.prop_cycle"].by_key()["color"][2])
-
-
+        # sec  = rvm_total[1]
+        cp = self.DebrisSwarm_1.conjuction_points_time
+    
         ax.scatter(prim[:,0], prim[:,1], prim[:,2], s=5, label="Satellite")
-        ax.scatter(sec[:,0],  sec[:,1],  sec[:,2],  s=5, label="Debris")
+        for i in range(self.DebrisSwarm_1.no_debris):
+            sec  = rvm_total[i+1]
+            x_cp, y_cp, z_cp = sec[cp[i], :3]
+            ax.scatter(x_cp, y_cp, z_cp, s=5, label="Conjunction Point", color="black")
+            ax.scatter(x_cp, y_cp, z_cp, s=80, color="black")
+            ax.scatter(sec[:,0],  sec[:,1],  sec[:,2],  s=5, label="Debris")
 
         ax.set_xlabel("$X$ (m)")
         ax.set_ylabel("$Y$ (m)")
