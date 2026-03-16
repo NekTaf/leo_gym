@@ -130,7 +130,7 @@ class CamEnv(gym.Env):
                 adex, 
                 adey))
         else:
-            obs_debris = np.zeros((self.DebrisSwarm_1.no_debris,2))
+            obs_debris = np.zeros((self.DebrisSwarm_1.num_debris,2))
 
             obs_satellite = np.array([
                 u_p,
@@ -186,6 +186,8 @@ class CamEnv(gym.Env):
                 
                 inv_sqrt_det = np.array([np.exp(-0.5 * logdet)])
                 det_cov_scaled = 10 * (inv_sqrt_det - norm_min) / (norm_max - norm_min) - 5
+                
+                self.inv_sqrt_det=inv_sqrt_det
 
                 # Same for collision radius
                 combined_radius = self.DebrisSwarm_1.radius_combined[i]
@@ -243,7 +245,7 @@ class CamEnv(gym.Env):
         if P_max_product == 0: #No more debris, P_max list empty
             
             # Check if any collisions occurred 
-            for i in range(self.DebrisSwarm_1.no_debris):
+            for i in range(self.DebrisSwarm_1.num_debris):
                 try:
                     conjuction_time = self.DebrisSwarm_1.conjuction_points_time[i]
                     p_max = self.DebrisSwarm_1.sat_debris_mahala[1+i][conjuction_time][1] 
@@ -271,10 +273,13 @@ class CamEnv(gym.Env):
                 return reward, terminated
 
         # CAM phase rewards
+        elif P_max_product<=self.cfg.p_max_limit:
+            reward = 0
+            
         else:
             reward = -np.log(P_max_product) -9 
                 
-        reward = reward 
+        reward = reward - self.delta_t0_and_man[1]/2
         
         return reward, terminated
                 
@@ -302,7 +307,16 @@ class CamEnv(gym.Env):
         delay_duration_thrust = self._clip_and_rescale(delay_duration_thrust, self.cfg.low_action, self.cfg.high_action)
 
 
+        
         self.f_direction = self._discretize_action(int(action["discrete"]))
+        
+        P_max_propagated = np.array(self.DebrisSwarm_1.metrics_at_tca)
+        P_max_product = abs(1 - np.prod(1 - P_max_propagated[:,1]))      
+        
+        if P_max_product<=self.cfg.p_max_limit and P_max_product != 0:
+           self.f_direction = [0,0] 
+
+        
         manplan = self.f_direction + delay_duration_thrust.tolist()
         self.delta_t0_and_man = delay_duration_thrust 
                 
@@ -470,7 +484,7 @@ class CamEnv(gym.Env):
 
         fig = go.Figure()
 
-        for i in range(self.DebrisSwarm_1.no_debris):
+        for i in range(self.DebrisSwarm_1.num_debris):
             states = np.array(self.DebrisSwarm_1.sat_debris_rvm)
 
             x = states[0][self.DebrisSwarm_1.conjuction_points_time[i]-10:self.DebrisSwarm_1.conjuction_points_time[i]+10, 0]
@@ -547,6 +561,10 @@ class CamEnv(gym.Env):
         axs[0].legend()
         axs[1].legend()
         
+        axs[1].set_xlabel("Minutes")
+
+        
+        
         # Radial thrust plot
         fig4, ax = plt.subplots(figsize=(5, 2))
 
@@ -561,15 +579,16 @@ class CamEnv(gym.Env):
         
         # Projected probability plot
         fig3, ax = plt.subplots(figsize=(5, 2))
-        
-        pmax = np.array(self.DebrisSwarm_1.p_max_predictions)
-        times_full = np.array(self.DebrisSwarm_1.manaplan_call_relative_time)
-        times = times_full / 60
-        n = min(times.size, pmax.size)
-        ax.scatter(times[:n], np.log10(pmax[:n]), s=20)
+        pmax = np.array(self.DebrisSwarm_1.p_max_per_debris)
+
+        for i in range(self.DebrisSwarm_1.num_debris):
+            times_full = np.array(self.DebrisSwarm_1.manaplan_call_relative_time)
+            times = times_full / 60
+            n = min(times.size, pmax[i].size)
+            ax.scatter(times[:n], np.log10(pmax[i][:n]), s=20)
 
         ax.axhline(np.log10(self.cfg.p_max_limit), label=r"$\log_{10}(P^\mathrm{max}_{c,\mathrm{req}})$",
-                   color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
+                color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
                 )
         ax.legend()
         
@@ -579,7 +598,7 @@ class CamEnv(gym.Env):
 
         
         # 3D Plot
-        fig2 = plt.figure(figsize=(4.5, 4.5), constrained_layout=True)
+        fig2 = plt.figure(figsize=(5, 5), constrained_layout=True)
         ax = fig2.add_subplot(111, projection="3d")
         
         fig2.patch.set_facecolor("white")
@@ -596,13 +615,15 @@ class CamEnv(gym.Env):
         cp = self.DebrisSwarm_1.conjuction_points_time
     
         ax.scatter(prim[:,0], prim[:,1], prim[:,2], s=5, label="Satellite")
-        for i in range(self.DebrisSwarm_1.no_debris):
+        for i in range(self.DebrisSwarm_1.num_debris):
             sec  = rvm_total[i+1]
             x_cp, y_cp, z_cp = sec[cp[i], :3]
-            ax.scatter(x_cp, y_cp, z_cp, s=5, label="Conjunction Point", color="black")
+            if i == 0:
+                ax.scatter(x_cp, y_cp, z_cp, s=5, label="Conjunction Point", color="black")
+            ax.scatter(x_cp, y_cp, z_cp, s=5, color="black")
             ax.scatter(x_cp, y_cp, z_cp, s=80, color="black")
             ax.scatter(sec[:,0],  sec[:,1],  sec[:,2],  s=5, label="Debris")
-
+        
         ax.set_xlabel("$X$ (m)")
         ax.set_ylabel("$Y$ (m)")
         ax.set_zlabel("$Z$ (m)")
@@ -619,7 +640,7 @@ class CamEnv(gym.Env):
         N = 110
         arrow_len = 1e6
 
-        fig7 = plt.figure(figsize=(4.5, 4.5), constrained_layout=True)
+        fig7 = plt.figure(figsize=(5, 5), constrained_layout=True)
         ax = fig7.add_subplot(111, projection="3d")
         
         fig7.patch.set_facecolor("white")
@@ -650,6 +671,15 @@ class CamEnv(gym.Env):
 
         ax.set_box_aspect(None, zoom=0.80)       
         ax.grid(False)
+
+        temp_dir = Path("temp")
+        temp_dir.mkdir(exist_ok=True)
+
+        for fig in [fig, fig4, fig3, fig2, fig7]:
+            fig.savefig(temp_dir / f"{fig.get_label() or id(fig)}.png",
+                        bbox_inches="tight")
+            fig.savefig(temp_dir / f"{fig.get_label() or id(fig)}.pgf",
+                        bbox_inches="tight")
 
 
         plt.show()

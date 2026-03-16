@@ -19,16 +19,23 @@ from IPython.display import display, HTML
 # plt.style.use(['science','ieee','high-vis'])
 plt.style.use(['science','bmh'])
 
-plt.rcParams['figure.dpi'] = 600
+plt.rcParams['figure.dpi'] = 300
+
+fig_width_in_inches = 5
+textwidth_pt = 384
+fontsize = 10 * (fig_width_in_inches / (textwidth_pt / 72.27))
 
 mpl.rcParams.update({
     "text.usetex": False,           # Use LaTeX for all text
     # "pgf.texsystem": "pdflatex",   # Use pdflatex for LaTeX rendering
-    "font.family": "serif",        # LaTeX-compatible serif font
-    "font.serif": ["DejaVu Sans"], # Set your desired font
-    "axes.labelsize": 12,          # Set label size
-    "font.size": 12,
-    "legend.fontsize": 10,
-    "xtick.labelsize": 10,
-    "ytick.labelsize": 10,
+    # "font.family": "serif",        # LaTeX-compatible serif font
+    # "font.serif": ["Times New Roman"], # Set your desired font
+    "font.family": "serif",
+    "mathtext.fontset": "stix",
+
+    "axes.labelsize": fontsize,          # Set label size
+    "font.size": fontsize,
+    "legend.fontsize": fontsize,
+    "xtick.labelsize": fontsize,
+    "ytick.labelsize": fontsize,
 })

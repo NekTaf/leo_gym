@@ -97,7 +97,7 @@ env_cfg = CamEnvConfig(
             As=1.3,
             mf=136
         ),
-        days=1,
+        days=2,
         dt=60,
         max_debris=1,
         min_debris=1,

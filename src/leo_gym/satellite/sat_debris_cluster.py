@@ -15,7 +15,7 @@ However, the uncertainty/variance of different obstacles will be variable, and w
 This will vary between a few meters to a few Km. 
 
 To investigate:
-    + How much time to before TCA to apply correction manuevers 
+    + How much time to before TCA to apply correction maneuvers 
 
 
 """
@@ -98,11 +98,11 @@ class SatDebrisCluster():
         self.C_rtn_s:list[np.ndarray] = [] # RTN covariance secondary objects (multiple debris)
         self.C_eci_combined:list[np.ndarray] = [] # ECI covariance secondary and primary objects 
         self.radius_combined:list[float] = [] # Combined radius
-        self.no_debris:int = 1 
+        self.num_debris:int = 1 
         self.dt_col:int = 60 # Simulation time for generating collisions (same as actual sim time in this case)
 
         if self.cfg.max_debris != 1:
-            self.no_debris = np.random.randint(
+            self.num_debris = np.random.randint(
                 low=self.cfg.min_debris, 
                 high=self.cfg.max_debris+1,
                 dtype=int)
@@ -116,7 +116,7 @@ class SatDebrisCluster():
             ])
 
         
-        for i in range(self.no_debris):
+        for i in range(self.num_debris):
             
             self.conjuction_time:int = int(
                 np.random.randint(
@@ -127,7 +127,7 @@ class SatDebrisCluster():
             
             self.conjuction_points_time.append(self.conjuction_time)
             pvm_col0 = collision_generator(
-                rv0=np.array(self.all_object_rvm0[0][:6]),
+                rv0=np.array(self.ideal_traj_rvm[0][:6]),
                 dt = self.dt_col, 
                 days=self.cfg.days,
                 relative_t_tca=int(self.conjuction_time*self.cfg.dt/self.dt_col),
@@ -384,15 +384,17 @@ class SatDebrisCluster():
                 P_max_product = 0
             
             self.p_max_predictions.append(P_max_product)
-            for i in range(self.no_debris):
+            for i in range(self.num_debris):
                 self.delta_r_b_plane[i].append(np.column_stack((
                     metrics_at_tca[i, 3],
                     metrics_at_tca[i, 4]
                 )))
+                self.p_max_per_debris[i].append(metrics_at_tca[i,1])
             
         except IndexError: # No more debris objects left
             self.p_max_predictions.append(0)
             self.delta_r_b_plane.append(np.zeros(2))
+            self.p_max_per_debris.append(0)
         
         return
                                            
@@ -438,7 +440,7 @@ class SatDebrisCluster():
     def plot_projected_position_bplane(self, save_path:str=None)->None:
         from shap.plots.colors._colors import red_blue, red_blue_circle, red_blue_no_bounds
 
-        for i in range(self.no_debris):
+        for i in range(self.num_debris):
             
             data = np.array(self.delta_r_b_plane[i]).squeeze(1)
 
@@ -485,6 +487,7 @@ class SatDebrisCluster():
         self.roe:list = [] # Relative orbital elements primary-reference trajectory 
         self.oe_ns:list = [] # non-singular orbital elements of all objects
         self.p_max_predictions:list = [] # Maximum collision probabilities
+        self.p_max_per_debris:list = []# Maximum collision probabilities per debris
         self.controls_RTN:list = [] # Thrusts in RTN frame each simulation timestep  
         self.manplans:list = [] # Maneuver plans used
         self.manaplan_call_relative_time:list = [] # Maneuver plan starting times at relative to start of simulaiton (stepxdt sec)
@@ -495,16 +498,16 @@ class SatDebrisCluster():
         self.all_object_rvm0.append(gen_rv0(sma=7573459).tolist()+[self.cfg.params_dyn.m])
 
         # init debris space objects
-        self.init_debris_objects()
         self.init_ideal_traj()
+        self.init_debris_objects()
         
         # initialize satellite and derbis lists  
-        self.sat_debris_rvm = [ [] for _ in range(self.no_debris+1)]
-        self.sat_debris_mahala = [ [] for _ in range(self.no_debris+1)]
-        self.sat_debris_b_plane = [ [] for _ in range(self.no_debris+1)]
-        self.non_singular_oe = [ [] for _ in range(self.no_debris+1)]
-        self.delta_r_b_plane = [ [] for _ in range(self.no_debris+1)] # Collision distance on the B-plane
-
+        self.sat_debris_rvm = [ [] for _ in range(self.num_debris+1)]
+        self.sat_debris_mahala = [ [] for _ in range(self.num_debris+1)]
+        self.sat_debris_b_plane = [ [] for _ in range(self.num_debris+1)]
+        self.non_singular_oe = [ [] for _ in range(self.num_debris+1)]
+        self.delta_r_b_plane = [ [] for _ in range(self.num_debris)] # Collision distance on the B-plane
+        self.p_max_per_debris = [[] for _ in range(self.num_debris)]
         for i, (
             object_rvm,
             object_mahala,

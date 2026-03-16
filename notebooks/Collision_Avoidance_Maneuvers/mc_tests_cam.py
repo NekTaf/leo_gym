@@ -29,7 +29,7 @@ from leo_gym.rl_algorithms.h_ppo.config import PPOConfig
 import json, importlib, re
 import argparse
 from pathlib import Path
-from workspace_optacom.libs.leo_gym.notebooks.C3_Collision_Avoidance_Maneuvers_SMDP.train_cam_hppo_cfg import env_cfg
+from train_cam_hppo_cfg import env_cfg
 
 # Set global seed for Monte-Carlo Runs
 seed_all(seed=10)
@@ -80,7 +80,7 @@ def run(rank, size, data_dir, seed):
 
     stats = []
     observations=[]
-    runs = 5
+    runs = 10
 
     for i in range(runs):
         print(f"Rank:{rank}, completed: {(i/runs)*100:.1f}%")
@@ -90,7 +90,7 @@ def run(rank, size, data_dir, seed):
         while True:
             action_dis, action_cont, *_ = ppo.choose_action(state=obs, deterministic=True)
             action = {"discrete": action_dis, "continuous": action_cont}
-
+            
             obs, reward, terminated, truncated, info = env.step(action)
             observations.append(obs)
 
@@ -100,10 +100,13 @@ def run(rank, size, data_dir, seed):
                 stats.append({
                     'p_max_start': P_max[0],
                     'p_max_end': P_max[-1],
-                    'radial_thrust': radial,
+                    "covariance": env.inv_sqrt_det ,
+                    "collision_radius": env.DebrisSwarm_1.radius_combined ,
                     'reward': reward,
                     'terminated':terminated,
-                    'truncated': truncated
+                    'truncated': truncated,
+                    "num_debris":env.DebrisSwarm_1.num_debris,
+                    "Delta_v":  (sum(abs(a) for a in radial) * env.DebrisSwarm_1.cfg.dt) / env.DebrisSwarm_1.dynamics_ideal.m,
                 })
                 break
             
@@ -145,10 +148,13 @@ if __name__ == '__main__':
     # Data file headers
     headers = ['p_max_start', 
                'p_max_end', 
-               'radial_thrust',
-               'reward', 
+               'covariance',
+               'collision_radius', 
+               'reward',
                'terminated',
-               'truncated']
+               'truncated',
+               'num_debris',
+               'Delta_v']
     
     pd.DataFrame([headers]).to_csv('mc_cam_results.csv', index=False, header=False)
     mp.set_start_method("spawn", force=True)
@@ -165,4 +171,3 @@ if __name__ == '__main__':
 
     elapsed = time.time() - start_time
     print(f"Elapsed time: {elapsed:.2f} seconds")
-    
