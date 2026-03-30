@@ -26,16 +26,19 @@ textwidth_pt = 384
 fontsize = 10 * (fig_width_in_inches / (textwidth_pt / 72.27))
 
 mpl.rcParams.update({
-    "text.usetex": False,           # Use LaTeX for all text
-    # "pgf.texsystem": "pdflatex",   # Use pdflatex for LaTeX rendering
-    # "font.family": "serif",        # LaTeX-compatible serif font
+    
+    "text.usetex": False,           
+    # "pgf.texsystem": "pdflatex",   
+    # "font.family": "serif",         
     # "font.serif": ["Times New Roman"], # Set your desired font
     "font.family": "serif",
-    "mathtext.fontset": "stix",
+    "pgf.rcfonts": False,
+    # "mathtext.fontset": "stix",
 
-    "axes.labelsize": fontsize,          # Set label size
+    "axes.labelsize": fontsize,          
     "font.size": fontsize,
     "legend.fontsize": fontsize,
     "xtick.labelsize": fontsize,
     "ytick.labelsize": fontsize,
+    "axes.xmargin": 0
 })

@@ -45,6 +45,7 @@ from leo_gym.orbit.dynamics.dynamics import Dynamics, DynamicsConfig
 from leo_gym.orbit.dynamics.init_weather_mjd import load_spice_kernels
 from leo_gym.satellite.satellite_base import Satellite
 from leo_gym.utils.utils import *
+from leo_gym.utils.matplot_style_cfg import *
 
 
 class SatDebrisClusterConfig(BaseModel):
@@ -455,23 +456,30 @@ class SatDebrisCluster():
             y = y[mask]
             indices = indices[mask]
 
-            plt.figure(figsize=(4,4))
+            plt.figure(figsize=(5, 3.5))
             scatter = plt.scatter(
-                x, y,
-                c=indices,
+                x, y, 
+                c=indices, 
                 cmap=red_blue_no_bounds,
-                marker='o'
-            )
+                marker='o',
+            ) 
 
             lim = np.max(np.abs(np.concatenate([x, y])))+500
             plt.xlim(-lim, lim)
             plt.ylim(-lim, lim)
-            plt.gca().set_aspect('equal', 'box')
+            # plt.gca().set_aspect('equal', 'box')
 
             plt.xlabel(r'$\xi \mathrm{ (m)}$ ')
             plt.ylabel(r'$\zeta \mathrm{ (m)}$')
             plt.title('B-Plane')
             plt.colorbar(scatter, label='Episode step index')
+
+            temp_dir = Path("temp")
+            temp_dir.mkdir(exist_ok=True)
+
+            plt.savefig(temp_dir / f"b_plane.pgf", bbox_inches="tight")
+            plt.savefig(temp_dir / f"b_plane.png", bbox_inches="tight")
+
             plt.show()
     
         return

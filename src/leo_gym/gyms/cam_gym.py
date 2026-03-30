@@ -675,12 +675,9 @@ class CamEnv(gym.Env):
         temp_dir = Path("temp")
         temp_dir.mkdir(exist_ok=True)
 
-        for fig in [fig, fig4, fig3, fig2, fig7]:
-            fig.savefig(temp_dir / f"{fig.get_label() or id(fig)}.png",
-                        bbox_inches="tight")
-            fig.savefig(temp_dir / f"{fig.get_label() or id(fig)}.pgf",
-                        bbox_inches="tight")
-
+        for i, fig in enumerate([fig, fig4, fig3, fig2, fig7], start=1):
+            fig.savefig(temp_dir / f"fig{i}.png", bbox_inches="tight")
+            fig.savefig(temp_dir / f"fig{i}.pgf", bbox_inches="tight")
 
         plt.show()
         
