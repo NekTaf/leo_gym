@@ -95,7 +95,7 @@ def collision_metrics(
     cov_2d = cov_b[np.ix_([0, 2], [0, 2])]
     inv_cov_2d = np.linalg.inv(cov_2d)
 
-    d2 = float(delta_2d.T @ inv_cov_2d @ delta_2d)
+    d2 = (delta_2d.T @ inv_cov_2d @ delta_2d).item()
     d = np.sqrt(max(d2, 0.0))
     d_safe = max(d, eps)
 
