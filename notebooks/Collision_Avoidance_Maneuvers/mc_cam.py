@@ -21,7 +21,6 @@ from tqdm import tqdm
 
 # Local
 from leo_gym.rl_algorithms.h_ppo.h_ppo_agent import Agent
-# from libs.leo_gym.notebooks.C3_Collision_Avoidance_Maneuvers_SMDP.train_cam_hppo_cfg import training_cfg, env_cfg, ppo_cfg
 from leo_gym.utils.utils import create_dir, seed_all
 from leo_gym.gyms.cam_gym import CamEnv, CamEnvConfig
 from pathlib import Path
@@ -64,7 +63,6 @@ ppo = Agent(
     critic_file_path=critic_file_path,
     device='cpu'
 )
-
 
 # Distributed Process Initializer 
 def init_process(rank, size, fn, data_dir, seed, backend='gloo'):
@@ -125,13 +123,10 @@ def run(rank, size, data_dir, seed):
 if __name__ == '__main__':
     start_time = time.time()
 
-    # Determine available CPUs
-    # threshold = 100
     usages = psutil.cpu_percent(percpu=True, interval=1)
     free_cpus = sum(1 for u in usages)
 
     size = 100
-    # size = free_cpus
     seeds = [random.randint(0, 2**32 - 1) for _ in range(size)]
     
     try:

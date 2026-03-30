@@ -13,6 +13,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field, replace
 from typing import List, Optional
+from pathlib import Path
 
 # Third-party
 import gymnasium as gym
@@ -171,7 +172,7 @@ class TrainingConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 training_cfg = TrainingConfig(
-    tracking_uri="/home/nektaf/mlruns",
-    experiment_name="cam_shap_journal_2",
+    tracking_uri = str(Path.home() / "mlruns")
+    experiment_name="cam_shap",
     run_name= None,
 )
