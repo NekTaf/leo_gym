@@ -17,28 +17,33 @@ from IPython.display import display, HTML
 # ))
 
 # plt.style.use(['science','ieee','high-vis'])
-plt.style.use(['science','bmh'])
+plt.style.use(['science','default'])
 
 plt.rcParams['figure.dpi'] = 300
+plt.rcParams['axes.xmargin'] = 0
 
-fig_width_in_inches = 5
-textwidth_pt = 384
-fontsize = 10 * (fig_width_in_inches / (textwidth_pt / 72.27))
+fontsize = 10 
 
 mpl.rcParams.update({
-    
-    "text.usetex": False,           
-    # "pgf.texsystem": "pdflatex",   
-    # "font.family": "serif",         
-    # "font.serif": ["Times New Roman"], # Set your desired font
+    "text.usetex": False,         
     "font.family": "serif",
-    "pgf.rcfonts": False,
-    # "mathtext.fontset": "stix",
 
-    "axes.labelsize": fontsize,          
-    "font.size": fontsize,
-    "legend.fontsize": fontsize,
-    "xtick.labelsize": fontsize,
-    "ytick.labelsize": fontsize,
-    "axes.xmargin": 0
+    "font.size": 10 ,
+    "axes.labelsize": 10 ,
+    "axes.titlesize": 10 ,
+    "legend.fontsize": 9 ,
+    "xtick.labelsize": 9 ,
+    "ytick.labelsize": 9 ,
+
+    "lines.linewidth": 1.5,
+    "axes.linewidth": 0.8,
+    "xtick.major.width": 0.8,
+    "ytick.major.width": 0.8,
+    "xtick.major.size": 3.5,
+    "ytick.major.size": 3.5,
+
+    # "lines.linewidth": 1.5,
+    # "axes.linewidth": 0.8,
+    "legend.frameon": False,
+    "axes.grid": True,
 })
