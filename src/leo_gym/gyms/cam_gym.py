@@ -15,6 +15,7 @@ from numpy.typing import NDArray
 from plotly.subplots import make_subplots
 from pydantic import BaseModel, ConfigDict, Field
 from scipy.integrate import quad
+import seaborn as sns
 
 # Local
 from leo_gym.satellite.sat_debris_cluster import (
@@ -64,13 +65,15 @@ class CamEnv(gym.Env):
 
     def __init__(self, 
                  cfg:CamEnvConfig|str|Path,
-                 seed:int):
+                 seed:int,
+                 debug:bool=False):
         
         super(CamEnv, self).__init__()
         
         self.load_cfg(cfg)
         seed_all(seed)        
         self.reset()
+        self.debug=debug
         
         
         self.action_space = spaces.Dict({
@@ -243,13 +246,18 @@ class CamEnv(gym.Env):
 
         # Recovery phase rewards
         if P_max_product == 0: #No more debris, P_max list empty
-            
+            if self.debug:
+                print("P_max_product =", P_max_product)
             # Check if any collisions occurred 
             for i in range(self.DebrisSwarm_1.num_debris):
                 try:
                     conjuction_time = self.DebrisSwarm_1.conjuction_points_time[i]
                     p_max = self.DebrisSwarm_1.sat_debris_mahala[1+i][conjuction_time][1] 
-                    
+                    if self.debug:
+                        print("checking debris", i)
+                        print("p_max =", p_max)
+                        print("limit =", self.cfg.p_max_limit)
+
                     if p_max>=self.cfg.p_max_limit: # Propagation index
                         reward = -100
                         terminated = True
@@ -416,13 +424,13 @@ class CamEnv(gym.Env):
         R, T, N = controls[:,0], controls[:,1], controls[:,2]
 
         fig.add_trace(go.Scatter(y=ada1, mode='lines'), row=1, col=1)
-        fig.update_yaxes(title_text=r"$a\delta a\ (m)$", row=1, col=1)
+        fig.update_yaxes(title_text=r"$a\delta a\ [m]$", row=1, col=1)
 
         fig.add_trace(go.Scatter(y=adl1, mode='lines'), row=2, col=1)
-        fig.update_yaxes(title_text=r"$a\delta\lambda\ (m)$", row=2, col=1)
+        fig.update_yaxes(title_text=r"$a\delta\lambda\ [m]$", row=2, col=1)
 
         fig.add_trace(go.Scatter(y=ade1, mode='lines'), row=3, col=1)
-        fig.update_yaxes(title_text=r"$\|\!a\,\delta\mathbf e\|\ (m)$", row=3, col=1)
+        fig.update_yaxes(title_text=r"$\|\!a\,\delta\mathbf e\|\ [m]$", row=3, col=1)
 
         fig.add_trace(go.Scatter(x=simulation_times, y=rewards, mode='markers'), row=4, col=1)
         fig.update_yaxes(title_text="Reward", row=4, col=1)
@@ -542,21 +550,17 @@ class CamEnv(gym.Env):
         adl = roe[:,1]
         ade = np.sqrt(roe[:,2]**2 + roe[:,3]**2)
 
-        fig, axs = plt.subplots(2, 1, sharex=True,figsize=(5, 3.5))
+        fig, axs = plt.subplots(2, 1, sharex=True,figsize=(8, 4))
 
         axs[0].plot(adl)
-        axs[0].axhline(self.cfg.adl_req,label=r"$|a \delta \lambda|_\mathrm{req}$ (m)",
-                       color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1])
-        axs[0].axhline(-self.cfg.adl_req,
-                       color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1])
-        axs[0].set_ylabel(r"$a \delta \lambda$ (m)")
+        axs[0].axhline(self.cfg.adl_req,label=r"$|a \delta \lambda|_\mathrm{req}$ [m]",color="red")
+        axs[0].axhline(-self.cfg.adl_req, color="red")
+        axs[0].set_ylabel(r"$a \delta \lambda$ [m]")
 
 
         axs[1].plot(ade)
-        axs[1].axhline(self.cfg.ade_norm_req, label=r"$\|a \delta \mathbf{e}\|_\mathrm{req}$ (m)",
-                       color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
-                    )
-        axs[1].set_ylabel(r"$\|a \delta \mathbf{e}\|$ (m)")
+        axs[1].axhline(self.cfg.ade_norm_req, label=r"$\|a \delta \mathbf{e}\|_\mathrm{req}$ [m]",color="red")
+        axs[1].set_ylabel(r"$\|a \delta \mathbf{e}\|$ [m]")
 
         axs[0].legend()
         axs[1].legend()
@@ -566,30 +570,29 @@ class CamEnv(gym.Env):
         
         
         # Radial thrust plot
-        fig4, ax = plt.subplots(figsize=(5, 2))
+        fig4, ax = plt.subplots(figsize=(8, 2))
 
         rtn = np.asarray(self.DebrisSwarm_1.controls_RTN)
         ax.plot(rtn[:, 0])
         
         ax.set_xlabel("Minutes")
-        ax.set_ylabel("$f_r$ (N)")
+        ax.set_ylabel("$f_r$ [N]")
 
         plt.show()
 
         
         # Projected probability plot
-        fig3, ax = plt.subplots(figsize=(5, 2))
+        fig3, ax = plt.subplots(figsize=(8, 2))
         pmax = np.array(self.DebrisSwarm_1.p_max_per_debris)
 
         for i in range(self.DebrisSwarm_1.num_debris):
             times_full = np.array(self.DebrisSwarm_1.manaplan_call_relative_time)
             times = times_full / 60
             n = min(times.size, pmax[i].size)
-            ax.scatter(times[:n], np.log10(pmax[i][:n]), s=20)
-
-        ax.axhline(np.log10(self.cfg.p_max_limit), label=r"$\log_{10}(P^\mathrm{max}_{c,\mathrm{req}})$",
-                color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
-                )
+            vals = np.maximum(pmax[i][:n], 1e-6)
+            ax.plot(times[:n], np.log10(vals))      
+            
+        ax.axhline(np.log10(self.cfg.p_max_limit), label=r"$\log_{10}(P^\mathrm{max}_{c,\mathrm{req}})$",color="red")
         ax.legend()
         
         ax.set_xlabel("Minutes")
@@ -598,7 +601,7 @@ class CamEnv(gym.Env):
 
         
         # 3D Plot
-        fig2 = plt.figure(figsize=(5, 5), constrained_layout=True)
+        fig2 = plt.figure(figsize=(4, 4), constrained_layout=True)
         ax = fig2.add_subplot(111, projection="3d")
         
         fig2.patch.set_facecolor("white")
@@ -619,14 +622,17 @@ class CamEnv(gym.Env):
             sec  = rvm_total[i+1]
             x_cp, y_cp, z_cp = sec[cp[i], :3]
             if i == 0:
-                ax.scatter(x_cp, y_cp, z_cp, s=5, label="Conjunction Point", color="black")
-            ax.scatter(x_cp, y_cp, z_cp, s=5, color="black")
+                ax.scatter(x_cp, y_cp, z_cp, s=3, label="Conjunction Point", color="black")
+            ax.scatter(x_cp, y_cp, z_cp, s=3, color="black")
             ax.scatter(x_cp, y_cp, z_cp, s=80, color="black")
-            ax.scatter(sec[:,0],  sec[:,1],  sec[:,2],  s=5, label="Debris")
-        
-        ax.set_xlabel("$X$ (m)")
-        ax.set_ylabel("$Y$ (m)")
-        ax.set_zlabel("$Z$ (m)")
+            if i==1:
+                ax.scatter(sec[:,0],  sec[:,1],  sec[:,2],  s=3, label="Debris", color='red')
+            else:
+                ax.scatter(sec[:,0],  sec[:,1],  sec[:,2],  s=3, color='red')
+
+        ax.set_xlabel("$X$ [m]")
+        ax.set_ylabel("$Y$ [m]")
+        ax.set_zlabel("$Z$ [m]")
 
         ax.set_box_aspect(None, zoom=0.80)       
         ax.grid(False)
@@ -640,7 +646,7 @@ class CamEnv(gym.Env):
         N = 110
         arrow_len = 1e6
 
-        fig7 = plt.figure(figsize=(5, 5), constrained_layout=True)
+        fig7 = plt.figure(figsize=(4, 4), constrained_layout=True)
         ax = fig7.add_subplot(111, projection="3d")
         
         fig7.patch.set_facecolor("white")
@@ -659,14 +665,14 @@ class CamEnv(gym.Env):
         ax.quiver(
             prim[:N,0], prim[:N,1], prim[:N,2],
             radial_vecs[:,0], radial_vecs[:,1], radial_vecs[:,2],
-            color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
+            color="red"
         )
         
         
         
-        ax.set_xlabel("$X$ (m)")
-        ax.set_ylabel("$Y$ (m)")
-        ax.set_zlabel("$Z$ (m)")
+        ax.set_xlabel("$X$ [m]")
+        ax.set_ylabel("$Y$ [m]")
+        ax.set_zlabel("$Z$ [m]")
         ax.view_init(elev=30, azim=45)
 
         ax.set_box_aspect(None, zoom=0.80)       
@@ -675,9 +681,12 @@ class CamEnv(gym.Env):
         temp_dir = Path("temp")
         temp_dir.mkdir(exist_ok=True)
 
-        for i, fig in enumerate([fig, fig4, fig3, fig2, fig7], start=1):
-            fig.savefig(temp_dir / f"fig{i}.png", bbox_inches="tight")
-            fig.savefig(temp_dir / f"fig{i}.pgf", bbox_inches="tight")
+        for fig in [fig, fig4, fig3, fig2, fig7]:
+            fig.savefig(temp_dir / f"{fig.get_label() or id(fig)}.png",
+                        bbox_inches="tight")
+            fig.savefig(temp_dir / f"{fig.get_label() or id(fig)}.pdf",
+                        bbox_inches="tight")
+
 
         plt.show()
         
