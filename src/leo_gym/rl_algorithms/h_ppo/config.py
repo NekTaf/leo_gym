@@ -25,6 +25,8 @@ import json
 import json, re, importlib
 from pathlib import Path
 
+import torch as T
+
 class PPOConfig(BaseModel):
 
     @classmethod
@@ -80,7 +82,7 @@ class PPOConfig(BaseModel):
     observation_encoder: ImportString = ObservationEncoder
     hidden_layer_size: int = 256
 
-    device: Literal["cpu", "cuda"] = "cuda"
+    device: Literal["cpu", "cuda"] | T.device = "cuda"
     continuous_dist_cls: ImportString = Normal
     
     net_arch: List[ImportString]
