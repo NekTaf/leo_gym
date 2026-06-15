@@ -12,24 +12,30 @@ import numpy as np
 # Local
 from leo_gym.satellite.satellite_base import SatelliteConfig, Satellite
 from leo_gym.utils.utils import generate_random_perpendicular_normalized_vector
-
+from leo_gym.orbit.dynamics.conversions import Delta_roe_to_rv
 
 def collision_generator(
                 rv0:np.ndarray,
                 relative_t_tca:int,
                 dt:int,
                 params_dyn:Any,
-                days:float
+                days:float,
+                Dlon_range:tuple=(-3e3,+3e3),
+                Decc_range:tuple=(-600,+600),
+                debug:bool=False
                 )->np.ndarray:
     
     """Generates starting coordinates for debris collision 
     
-    :params pvm0: starting position velocity and mass of debris object
-    :params relative_t_tca: discrete relative time to collision from starting simulation ephemeris time
-    :params dt: sampling time for simulation
-    :params days: number of days for simulation (in this case anything above relative_t_tca is fine)
+    :params pvm0: starting position velocity and mass of debris object [m, m, m, m/s, m/s, m/s, kg]
+    :params relative_t_tca: discrete relative time to collision from starting simulation ephemeris time [sec/dt]
+    :params dt: sampling time for simulation [sec]
+    :params days: number of days for simulation (in this case anything above relative_t_tca is fine) 
     :params params_dyn: parameters for debris object using satellite_base class, all perturbations are included
-        
+    :params Dlon_range: ROE longitude deviation applied at conjuction point [m]
+    :params Decc_range: ROE eccentricity deviation applied at conjuction point [m]
+    :params debug: prints debug info
+
     :returns: (7,) pvm of obstacle 
     """
 
@@ -51,8 +57,8 @@ def collision_generator(
     # v_vector = v_vector.reshape(3,)
     
     # generate random velocity vector but keep position same
-    old_v   = object_secondary.rvm_eci_states[-1][3:6]
-    v_norm  = np.linalg.norm(old_v)
+    old_v = object_secondary.rvm_eci_states[-1][3:6]
+    v_norm = np.linalg.norm(old_v)
 
     while True:
         v_vector = generate_random_perpendicular_normalized_vector(p_vector) * v_norm
@@ -62,13 +68,28 @@ def collision_generator(
     
     
     object_secondary.rvm_eci_states[-1] = np.concatenate((p_vector,v_vector,object_secondary.rvm_eci_states[-1][6:7]),axis=0)
-
+    Dlon = np.random.uniform(*Dlon_range)
+    Decc = np.random.uniform(*Decc_range)
+    
+    Droe = np.array([0,Dlon,
+                    Decc,Decc,
+                    0,0])
+    if debug:
+        print("ROE Deviation applied at conjuction point: ",Droe)
+    
+    new_rv = Delta_roe_to_rv(
+        Droe=Droe,
+        rv_ref=object_secondary.rvm_eci_states[-1][:6]
+    )
+    
+    object_secondary.rvm_eci_states[-1][:6] = new_rv
+    
     # do back propagation to get starting relative position and velocity vectors for debris
     object_secondary.dt = -abs(object_secondary.dt)
     
     for _ in range(relative_t_tca):
-        object_secondary.sat_propagate(np.zeros(3))   
-
+        object_secondary.sat_propagate(np.zeros(3))  
+        
     return object_secondary.rvm_eci_states[-1]
 
     
