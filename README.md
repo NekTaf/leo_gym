@@ -41,6 +41,21 @@ pip install git+https://github.com/NekTaf/leo_gym.git
 ## Acknowledgements
 This work has been partially funded by the European Space Agency (ESA) open Invitations to Tender (ITT) and innovation research grant in OPTACOM project, in collaboration with OHB Sweden under Grant Contract no: OPC-OSE-CC-0536
 
+## Citation
+If you use LEO-GYM in your research, please cite it as:
+
+```bibtex
+@article{tafanidis2025leo,
+  title={LEO-GYM: A Reinforcement Learning Library for Satellite Control in LEO},
+  author={Tafanidis, Nektarios Aristeidis and Banerjee, Avijit and Nikolakopoulos, George},
+  journal={IFAC-PapersOnLine},
+  volume={59},
+  number={31},
+  pages={127--132},
+  year={2025},
+  publisher={Elsevier}
+}
+```
 
 ## Contact
 
