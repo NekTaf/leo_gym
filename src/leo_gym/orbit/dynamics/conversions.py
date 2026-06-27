@@ -559,6 +559,8 @@ def Delta_roe_to_rv(
         r_bn_n=rv_ref[:3],
         v_bn_n=rv_ref[-3:],
         planet="earth")
+
+    assert np.isfinite(oe_kep_ref).all(), (f"oe_kep_ref contains NaN:\n {oe_kep_ref}")
     
     oe_ns_ref = classical_to_non_singular_elements(
         semi_major_axis=oe_kep_ref[0],
@@ -576,6 +578,9 @@ def Delta_roe_to_rv(
         oe_ns_ref[2],
         oe_ns_ref[3],
         oe_ns_ref[4]]).reshape(6,)
+    
+    assert np.isfinite(oe_ns_ref).all(), (f"oe_ns_ref contains NaN:\n {oe_ns_ref}")
+
 
     Droe[0] = Droe[0]*oe_ns_ref[0]
 
@@ -588,6 +593,8 @@ def Delta_roe_to_rv(
                                         mean_argument_of_latitude=oe_ns_real[1],
                                         right_ascension=oe_ns_real[5])
     
+    assert np.isfinite(oe_real).all(), (f"oe_real contains NaN:\n {oe_real}")
+
     rv = classical_to_vector_elements(
         semi_major_axis=oe_real[0],
         eccentricity=oe_real[1],
@@ -597,6 +604,12 @@ def Delta_roe_to_rv(
         true_anomaly=oe_real[6])
     
     rv = np.array(rv).reshape(6,)
-        
+    
+    
+    assert np.isfinite(rv).all(), (
+        f"rv contains NaN:\n"
+        f"{rv}"
+    )
+
     return rv
 
