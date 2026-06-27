@@ -5,6 +5,7 @@ Generate collision at TCA (time of closest approach).
 # Standard library
 import copy
 from typing import Any, Dict, List, Optional, Tuple
+import logging
 
 # Third-party
 import numpy as np
@@ -50,8 +51,7 @@ def collision_generator(
     Droe = np.array([0,Dlon,
                     Decc,Decc,
                     0,0])
-    if debug:
-        print("ROE Deviation applied at conjuction point: ",Droe)
+    logger.debug("ROE deviation applied at conjunction point: %s", Droe)
     
     rv0 = Delta_roe_to_rv(
         Droe=Droe,
@@ -108,6 +108,11 @@ def collision_generator(
     
     for _ in range(relative_t_tca):
         object_secondary.sat_propagate(np.zeros(3))  
+        
+    assert np.isfinite(object_secondary.rvm_eci_states[-1]).all(), (
+        f"debris rvm contains NaN:\n"
+        f"{object_secondary.rvm_eci_states[-1]}"
+    )
         
     return object_secondary.rvm_eci_states[-1]
 
