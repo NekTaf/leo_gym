@@ -16,8 +16,6 @@ from leo_gym.orbit.dynamics.propagators import PropagatorModels
 
 np.seterr(invalid='ignore')
 
-
-
 def parse_np_array(s: str):
     s = s.replace("[", " ").replace("]", " ")
     s = s.replace("\n", " ")
@@ -94,10 +92,10 @@ class DynamicsConfig(BaseModel):
 
 class Dynamics():
     
-    def __init__(self, 
-                 cfg:DynamicsConfig):
-        
-        
+    def __init__(
+        self, 
+        cfg:DynamicsConfig
+    ):
         self.cfg = cfg
         self.m = self.cfg.m
 
@@ -116,9 +114,10 @@ class Dynamics():
     # Initalise ephemeris time and weather data 
 
     # Weather data_SPICE
-    def read_space_weather(self, 
-                           file:str
-                           )->None:
+    def read_space_weather(
+        self, 
+        file:str
+    )->None:
         
         with open(file, 'r') as fid:
             for n in range(361):
@@ -129,36 +128,50 @@ class Dynamics():
         return
                             
     # Reference Frame TF
-    def _DCM_eci2rtn(self,
-                     r: NDArray, 
-                     v: NDArray
-                     )->NDArray:
+    def _DCM_eci2rtn(
+        self,
+        r: NDArray, 
+        v: NDArray
+    )->NDArray:
+        """
+        DCM from the ECI frame to the RTN frame.
+
+        :param r: Position vector in the ECI frame with shape (3,) [m].
+        :type r: NDArray
+        :param v: Velocity vector in the ECI frame with shape (3,) [m/s].
+        :type v: NDArray
+
+        :return: DCM from the ECI frame to the RTN frame with shape (3, 3).
+        :rtype: NDArray
+        """
         #Hill frame Transformation DCM from ECI to RTN
         r_norm = r / np.linalg.norm(r)
         v_norm = v / np.linalg.norm(v)
         # Orbit normal
-        h_norm = (np.cross(r_norm, v_norm)
-                  / np.linalg.norm(np.cross(r_norm, v_norm)))
+        h_norm = (np.cross(r_norm, v_norm)/np.linalg.norm(np.cross(r_norm, v_norm)))
         # Orbit tangential
         t_norm = np.cross(h_norm, r_norm)
         return np.vstack((r_norm, t_norm, h_norm))
     
-    def _DCM_eci2ecef(self
-                      )->NDArray:
+    def _DCM_eci2ecef(
+        self
+    )->NDArray:
         DCM = (spice.sxform('J2000', 'ITRF93', self._currentET()))
         DCM = DCM[:3, :3]
         return DCM
     
     # For plotting
-    def action_rtn_to_eci(self
-                          )->NDArray:
+    def action_rtn_to_eci(
+        self
+    )->NDArray:
         u_thruster_rtn = self.u
         DCM_eci2rtn = self._DCM_eci2rtn(self.r, self.v)
         u_thruster_eci = DCM_eci2rtn.T @ u_thruster_rtn
         return u_thruster_eci
 
-    def action_eci_to_rtn(self
-                          )->NDArray:
+    def action_eci_to_rtn(
+        self
+    )->NDArray:
         u_thruster_eci = self.u
         DCM_eci2rtn = self._DCM_eci2rtn(self.r, self.v)
         u_thruster_rtn = DCM_eci2rtn @ u_thruster_eci
@@ -170,25 +183,33 @@ class Dynamics():
         return self.cfg.eph_time_0 + self.t
 
     # Celestial Bodies Positions
-    def _r_moon_eci(self
-                    )->NDArray:
-        r_moon_eci, _ = spice.spkpos('MOON', self._currentET(), 'J2000',
-                                     'NONE', 'Earth')
+    def _r_moon_eci(self)->NDArray:
+        r_moon_eci, _ = spice.spkpos('MOON', self._currentET(), 'J2000', 'NONE', 'Earth')
         return r_moon_eci*10**3
     
-    def _r_sun_eci(self
-                   )->NDArray:
-        r_sun_eci, _ = spice.spkpos('SUN', self._currentET(), 'J2000',
-                                    'NONE', 'Earth')
+    def _r_sun_eci(self)->NDArray:
+        r_sun_eci, _ = spice.spkpos('SUN', self._currentET(), 'J2000', 'NONE', 'Earth')
         return r_sun_eci*10**3
     
     
-    def _irregularGrav(self, 
-                       r: NDArray, 
-                       n_max:int,
-                       m_max:int
-                       )->NDArray:
-        """Irregular Earth Gravity Calculation
+    def _irregularGrav(
+        self, 
+        r: NDArray, 
+        n_max:int,
+        m_max:int
+    )->NDArray:
+        """
+        Irregular Earth gravity calculation.
+
+        :param r: Position vector in the ECI frame with shape (3,) [m].
+        :type r: NDArray
+        :param n_max: Maximum degree of the spherical harmonic expansion.
+        :type n_max: int
+        :param m_max: Maximum order of the spherical harmonic expansion 
+        :type m_max: int
+
+        :return: Irregular gravitational acceleration in the ECI frame with shape (3,).
+        :rtype: NDArray
         """
         # Earth-fixed position
         r_bf = np.dot(self._DCM_eci2ecef(), r)
@@ -235,12 +256,27 @@ class Dynamics():
 
         return a
     
-    def _legrende(self,
-                  n_max:int,
-                  m_max:int,
-                  latgc:float
-                  )->NDArray:
-        
+    def _legrende(
+        self,
+        n_max:int,
+        m_max:int,
+        latgc:float
+    )->Tuple[NDArray, NDArray]:
+        """
+        Compute the associated Legendre polynomials.
+
+        :param n_max: Maximum degree of the spherical harmonic expansion.
+        :type n_max: int
+        :param m_max: Maximum order of the spherical harmonic expansion.
+        :type m_max: int
+        :param latgc: Geocentric latitude [rad].
+        :type latgc: float
+
+        :return: Associated Legendre polynomials and their derivatives with
+                respect to geocentric latitude, both with shape
+                (n_max + 1, m_max + 1).
+        :rtype: Tuple[NDArray, NDArray]
+        """
         pnm = np.zeros((n_max + 1, m_max + 1))
         dpnm = np.zeros((n_max + 1, m_max + 1))
 
@@ -282,8 +318,8 @@ class Dynamics():
 
         return pnm, dpnm
 
-    def _j2_acc(self
-                )->NDArray:
+    def _j2_acc(self)->NDArray:
+        
         r_norm = np.linalg.norm(self.r)
         d1 = - (3 / 2) * self.cfg.j2 * self.cfg.R_Earth ** 2 * self.cfg.GM_Earth / (r_norm ** 5)
         d2 = 1 - 5 * self.r[2] ** 2 / (r_norm ** 2)
@@ -293,8 +329,7 @@ class Dynamics():
         # print(np.array([aj2_x, aj2_y, aj2_z]))
         return np.array([aj2_x, aj2_y, aj2_z])
     
-    def _a_thruster(self
-                    )->NDArray:
+    def _a_thruster(self)->NDArray:
         
         if self.cfg.flag_rtn_thrust: 
             if self.m <= 0 or self.u is None:
@@ -333,27 +368,29 @@ class Dynamics():
 
                 return a_thruster_eci
             
-    def _a_grav_moon(self
-                     )->NDArray:
-        return self.cfg.GM_Moon * (((self._r_moon_eci()-self.r) /
-                             np.linalg.norm(self._r_moon_eci() - self.r)**3) -
-                            (self._r_moon_eci() / np.linalg.norm(self._r_moon_eci())**3))
-    
-    def _a_grav_sun(self
-                    )->NDArray:
-        return self.cfg.GM_Sun * (((self._r_sun_eci()-self.r) /
-                            np.linalg.norm(self._r_sun_eci() -self.r)**3) -
-                           (self._r_sun_eci() / np.linalg.norm(self._r_sun_eci())**3))
-    
-    def _a_drag(self
-                )->NDArray:
+    def _a_grav_moon(self) -> NDArray:
+        r_moon = self._r_moon_eci()
+
+        return self.cfg.GM_Moon * (
+            (r_moon - self.r) / np.linalg.norm(r_moon - self.r) ** 3
+            - r_moon / np.linalg.norm(r_moon) ** 3
+        )    
+        
+    def _a_grav_sun(self) -> NDArray:
+        r_sun = self._r_sun_eci()
+
+        return self.cfg.GM_Sun * (
+            (r_sun - self.r) / np.linalg.norm(r_sun - self.r) ** 3
+            - r_sun / np.linalg.norm(r_sun) ** 3
+        )  
+        
+    def _a_drag(self)->NDArray:
         self.rho = self._pedm()
         v_rel = self.v - np.cross(np.array([0, 0, self.cfg.omega_Earth]), self.r)
         return - 1 / 2 * ((self.cfg.Ad * self.cfg.Cd) /
                           self.m) * self.rho * np.linalg.norm(v_rel)**2 * (v_rel / np.linalg.norm(v_rel))
-      
-    def _pedm(self
-              )->float:
+
+    def _pedm(self)->float:
         """Piece-wise exponential density model
         """
         
@@ -481,36 +518,62 @@ class Dynamics():
         # Calculate and return the density
         rho = rho0 * np.exp(-(h - h0) / H)
         return rho
-   
-    def _a_srp(self
-               )->NDArray:
-        # solar radiation pressure
-        # dual conical shadow model (Montenbrück & Gill 2000)
-        s = self.r
-        a = np.arcsin(self.cfg.R_Sun / np.linalg.norm(self._r_sun_eci() - self.r))
-        b = np.arcsin(self.cfg.R_Earth/ np.linalg.norm(s))
-        c = np.arccos(np.dot(-s, (self._r_sun_eci() - self.r)) /
-                      (np.linalg.norm(s) * np.linalg.norm(self._r_sun_eci() - self.r)))
-        X = (c ** 2 + a ** 2 - b ** 2) / (2 * c)
-        Y = np.sqrt(a ** 2 - X ** 2)
-        A = a ** 2 * np.arccos(X / a) + b ** 2 * np.arccos((c - X) / b) - c * Y
 
-        if c >= a + b:  # no eclipse
+    def _a_srp(self) -> NDArray:
+        # Solar radiation pressure.
+        # Dual conical shadow model (Montenbrück & Gill 2000).
+
+        r_sun = self._r_sun_eci()
+        s = self.r
+        d = r_sun - s
+
+        a = np.arcsin(self.cfg.R_Sun / np.linalg.norm(d))
+        b = np.arcsin(self.cfg.R_Earth / np.linalg.norm(s))
+        c = np.arccos(np.dot(-s, d) / (np.linalg.norm(s) * np.linalg.norm(d)))
+
+        X = (c**2 + a**2 - b**2) / (2 * c)
+        Y = np.sqrt(a**2 - X**2)
+        A = (
+            a**2 * np.arccos(X / a)
+            + b**2 * np.arccos((c - X) / b)
+            - c * Y
+        )
+
+        if c >= a + b:
             nu = 1
-        elif np.linalg.norm(a - b) < c and c < a + b:  # penumbra
-            nu = 1 - A / (np.pi * a ** 2)
-        elif c < b - a and b > a:  # umbra
+        elif abs(a - b) < c < a + b:
+            nu = 1 - A / (np.pi * a**2)
+        elif c < b - a and b > a:
             nu = 0
-        elif c < a - b and a > b:  # penumbra maximum
-            nu = 1 - (b ** 2 / a ** 2)
+        elif c < a - b and a > b:
+            nu = 1 - (b**2 / a**2)
         else:
             nu = 0
-        return (nu * self.cfg.P * (self.cfg.AU ** 2) * self.cfg.Cr * self.cfg.As / self.m * (self.r - self._r_sun_eci())
-                / (np.linalg.norm(self.r - self._r_sun_eci()) ** 3))
 
-    def _a_grav(self, 
-                flag:int=0
-                )->NDArray:
+        return (
+            nu
+            * self.cfg.P
+            * self.cfg.AU**2
+            * self.cfg.Cr
+            * self.cfg.As
+            / self.m
+            * (s - r_sun)
+            / np.linalg.norm(s - r_sun)**3
+        )
+        
+    def _a_grav(
+        self, 
+        flag:int=0
+    )->NDArray:
+        """
+        Compute the Earth's gravitational acceleration.
+
+        :param flag: Gravity model selector (0: point mass, 1: 20x20, 2: 2x2).
+        :type flag: int
+
+        :return: Gravitational acceleration in the ECI frame with shape (3,) [m/s^2].
+        :rtype: NDArray
+        """
         if flag == 1:
             return self._irregularGrav(self.r,20,20)
         elif flag == 2:
@@ -518,8 +581,7 @@ class Dynamics():
         elif flag == 0:
             return (-self.cfg.GM_Earth / (np.linalg.norm(self.r) ** 3)) * self.r
         
-    def _total_acc(self
-                   )->NDArray:
+    def _total_acc(self)->NDArray:
         
         pert_sun = np.zeros(3)
         pert_moon = np.zeros(3)
@@ -553,22 +615,18 @@ class Dynamics():
                 + pert_drag
                 )
 
-    def _massflow(self
-                  )->float:
+    def _massflow(self)->float:
         if self.cfg.flag_mass_loss:
             return -np.linalg.norm(self._a_thruster() * self.m)/(self.cfg.g0 * self.cfg.Isp)
         else:
             return 0
     
     
-    def get_current_pertubration_forces(self,
-                                        x:NDArray,
-                                        t:float
-                                        )->Tuple[NDArray,
-                                                 NDArray,
-                                                 NDArray,
-                                                 NDArray,
-                                                 NDArray]: 
+    def get_current_pertubration_forces(
+        self,
+        x:NDArray,
+        t:float
+    )->Tuple[NDArray,NDArray,NDArray,NDArray,NDArray]: 
         """Get current perturbation forces
 
         Args:
@@ -590,9 +648,10 @@ class Dynamics():
                 self._a_drag()
                 
 
-    def get_lat_lon(self, 
-                    r:NDArray
-                    )->Tuple[float,float]:
+    def get_lat_lon(
+        self, 
+        r:NDArray
+    )->Tuple[float,float]:
         """get Sat Lat Lon
         """
         
@@ -609,10 +668,12 @@ class Dynamics():
         return lat,lon
 
     
-    def dxdt(self,x: NDArray,
-             u:NDArray,
-             t:float
-             )-> NDArray: 
+    def dxdt(
+        self,
+        x: NDArray,
+        u:NDArray,
+        t:float
+    )-> NDArray: 
         
         self.r = x[:3]
         self.v = x[3:6]
@@ -621,12 +682,14 @@ class Dynamics():
         
         return np.concatenate((self.v, self._total_acc(), [self._massflow()]),axis=0)
 
-    def propagate(self,x:NDArray,
-                  u:NDArray,
-                  t:float,
-                  dt:float, 
-                  rk4_flag:bool=True
-                  )->NDArray:
+    def propagate(
+        self,
+        x:NDArray,
+        u:NDArray,
+        t:float,
+        dt:float, 
+        rk4_flag:bool=True
+    )->NDArray:
         
         u = np.clip(u,-self.cfg.f_max,self.cfg.f_max)
                 
