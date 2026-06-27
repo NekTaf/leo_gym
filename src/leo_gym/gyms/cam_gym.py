@@ -37,17 +37,12 @@ class CamEnvConfig(BaseModel):
     """
     high_action: Any = Field(..., description="Upper bounds for each action dimension")
     low_action: Any  = Field(..., description="Lower bounds for each action dimension")
-    debris_cluster_config: SatDebrisClusterConfig = Field(
-        ..., description="Configuration for debris cluster dynamics object"
-    )
-
+    debris_cluster_config: SatDebrisClusterConfig = Field(..., description="Configuration for debris cluster dynamics object")
     p_max_limit: float = Field(..., gt=0, description="Max thrust limit")
     adl_req: float = Field(..., ge=0, description="ADL requirement")
     ade_norm_req: float = Field(..., ge=0, description="ADE normalization")
     max_time_index: int = Field(..., ge=1, description="Max real time per episode")
-    
-    reduced_obs: bool = Field(False,description="Reduce observation size based on SHAP analysis")
-    
+    reduced_obs: bool = Field(False, description="Reduce observation size based on SHAP analysis")
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
     
 
@@ -55,7 +50,8 @@ class CamEnvConfig(BaseModel):
 class CamEnv(gym.Env):
     
     """
-    + Subscript _p denotes primary satellite
+    Notes: 
+    + Subscript _p denotes primary satellite 
     + Subscript _s denotes secondary debris objects
     + TCA stands for time of closest approach where collision happens 
     + For data, interact with SatDebrisCluster object containing satellite and debris data and propagation function
@@ -372,9 +368,11 @@ class CamEnv(gym.Env):
         if (self.DebrisSwarm_1.n) >= self.cfg.max_time_index:
             truncated = True
             
-        info ={"cost": self.cost,
-               "sojourn_t": sum(self.delta_t0_and_man)/60, #Convert to hours
-               "n": self.DebrisSwarm_1.n} # Discrete time in simulation (real time = dt*index)
+        info ={
+            "cost": self.cost,
+            "sojourn_t": sum(self.delta_t0_and_man)/60, #Convert to hours
+            "n": self.DebrisSwarm_1.n
+        } # Discrete time in simulation (real time = dt*index)
         
         self.rewards_plot_list.append(reward)
         self.n_plot_list.append(self.DebrisSwarm_1.n)
