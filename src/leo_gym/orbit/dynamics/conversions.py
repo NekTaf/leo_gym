@@ -441,8 +441,10 @@ def delta_rv_rtn(rv_1:NDArray,
 
 
 
-def dcm_eci_2_rtn(r:NDArray, 
-                  v:NDArray)->NDArray:
+def dcm_eci_2_rtn(
+    r:NDArray, 
+    v:NDArray
+)->NDArray:
     """
     Hill frame transformation DCM from ECI to RTN.
 
@@ -460,8 +462,10 @@ def dcm_eci_2_rtn(r:NDArray,
     return np.vstack((r_norm, t_norm, h_norm))
 
 
-def dcm_eci_2_b_plane(rv_p:NDArray, 
-                      rv_s:NDArray)->NDArray:
+def dcm_eci_2_b_plane(
+    rv_p:NDArray, 
+    rv_s:NDArray
+)->NDArray:
     """
     Matrix for frame conversion from ECI to B-plane.
 
@@ -477,8 +481,10 @@ def dcm_eci_2_b_plane(rv_p:NDArray,
     return np.vstack((xi, eta, zeta))
 
 
-def delta_r_eci_2_rb(rv_p: NDArray, 
-                     rv_s: NDArray)-> NDArray:
+def delta_r_eci_2_rb(
+    rv_p: NDArray, 
+    rv_s: NDArray
+)-> NDArray:
     """
     Compute the relative difference between a debris object and the primary satellite,
     transforming from ECI coordinates to the B-plane ({xi, eta, zeta}).
@@ -499,10 +505,12 @@ def delta_r_eci_2_rb(rv_p: NDArray,
 
 
 
-def covariance_converisions(rv_p:NDArray, 
-                            rv_s:NDArray,
-                            C_rtn_p:NDArray, 
-                            C_rtn_s:NDArray)->Tuple[NDArray,NDArray]:
+def covariance_converisions(
+    rv_p:NDArray, 
+    rv_s:NDArray,
+    C_rtn_p:NDArray, 
+    C_rtn_s:NDArray
+)->Tuple[NDArray,NDArray]:
 
     """
     Convert combined covariance between primary (satellite) and secondary (debris) objects.
@@ -536,7 +544,7 @@ def covariance_converisions(rv_p:NDArray,
 def Delta_roe_to_rv(
     Droe:NDArray,
     rv_ref:NDArray
-    )-> NDArray:
+)-> NDArray:
 
     """
     Returns real trajectory point based on displacement ROE vector
@@ -574,11 +582,11 @@ def Delta_roe_to_rv(
     oe_ns_real = oe_ns_ref - Droe/oe_ns_ref[0]
     
     oe_real = nonsingular_to_classical_oe(semi_major_axis=oe_ns_real[0],
-                                          e_x=oe_ns_real[2],
-                                          e_y=oe_ns_real[3],
-                                          inclination=oe_ns_real[4],
-                                          mean_argument_of_latitude=oe_ns_real[1],
-                                          right_ascension=oe_ns_real[5])
+                                        e_x=oe_ns_real[2],
+                                        e_y=oe_ns_real[3],
+                                        inclination=oe_ns_real[4],
+                                        mean_argument_of_latitude=oe_ns_real[1],
+                                        right_ascension=oe_ns_real[5])
     
     rv = classical_to_vector_elements(
         semi_major_axis=oe_real[0],
