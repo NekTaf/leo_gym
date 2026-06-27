@@ -6,6 +6,9 @@ import random
 import shutil
 import socket
 from datetime import datetime
+import inspect
+from pathlib import Path
+from typing import Any
 
 # Third-party
 import numpy as np
@@ -13,8 +16,9 @@ import torch
 import yaml
 
 
-def create_dir(parent_name: str
-               )->str:
+def create_dir(
+    parent_name: str
+)->str:
     """
     Creates a directory named with the parent name, computer's hostname, and the current datetime.
     
@@ -32,9 +36,10 @@ def create_dir(parent_name: str
     return directory_save
 
 
-def hypers2txt(hyper_dict:dict,
-               file_path: str
-               )->None:
+def hypers2txt(
+    hyper_dict:dict,
+    file_path: str
+)->None:
     """
     Writes the items of a dictionary to a text file, each key-value pair on a new line.
     
@@ -49,9 +54,10 @@ def hypers2txt(hyper_dict:dict,
     return
             
             
-def save_params_to_file(params: object,
-                        file_name: str
-                        )->None:
+def save_params_to_file(
+    params: object,
+    file_name: str
+)->None:
     """
     Saves parameters from an object's attributes to a file.
     
@@ -65,8 +71,9 @@ def save_params_to_file(params: object,
             
     return
 
-def yaml2dict(filename:str
-              )->dict:
+def yaml2dict(
+    filename:str
+)->dict:
     """
     Loads a YAML file and returns its contents as a dictionary.
     
@@ -83,9 +90,10 @@ def yaml2dict(filename:str
 
 
 
-def save_yaml_copy(original_file:str,
-                   copy_file:str
-                   )->None:
+def save_yaml_copy(
+    original_file:str,
+    copy_file:str
+)->None:
     """
     Copies the contents of a YAML file to another file.
     
@@ -101,9 +109,10 @@ def save_yaml_copy(original_file:str,
     return
 
 
-def write2txt(text_file:str, 
-              data:str
-              )->None:
+def write2txt(
+    text_file:str, 
+    data:str
+)->None:
     """
     Appends data to a text file.
     
@@ -117,9 +126,10 @@ def write2txt(text_file:str,
     return
 
 
-def dict2txt(text_file:str, 
-             dict: str
-             )->None:
+def dict2txt(
+    text_file:str, 
+    dict: str
+)->None:
     """
     Appends the contents of a dictionary to a text file, formatting each key-value pair.
     
@@ -134,8 +144,9 @@ def dict2txt(text_file:str,
     return
 
 
-def clear_csv(name: str
-              )->None:
+def clear_csv(
+    name: str
+)->None:
     """
     Clears the contents of a CSV file.
     
@@ -149,9 +160,10 @@ def clear_csv(name: str
 
 
 
-def append_states_to_csv(file_path:str, 
-                         states:list
-                         )->None:
+def append_states_to_csv(
+    file_path:str, 
+    states:list
+)->None:
     """
     Appends a list of states to a CSV file.
     
@@ -185,8 +197,9 @@ def append_states_to_csv(file_path:str,
 
 
 
-def create_unique_folder(base_foldername: str
-                         )->str:
+def create_unique_folder(
+    base_foldername: str
+)->str:
     """
     Creates a unique folder in the current directory. If a folder with the same name already exists,
     a counter is appended to the folder name (e.g., results0, results1, etc.).
@@ -208,9 +221,10 @@ def create_unique_folder(base_foldername: str
 
 
 
-def read_and_copy_python_file(init_file:str,
-                              copied_file:str
-                              )->None:
+def read_and_copy_python_file(
+    init_file:str,
+    copied_file:str
+)->None:
     
     with open(init_file, 'r') as file:
         content = file.read()
@@ -221,9 +235,10 @@ def read_and_copy_python_file(init_file:str,
 
 
 
-def compress_file(source_file_path:str, 
-                  destination_file_path:str
-                  )->None:
+def compress_file(
+    source_file_path:str, 
+    destination_file_path:str
+)->None:
     """
     Compresses a file using gzip and saves it to a new location.
 
@@ -238,8 +253,9 @@ def compress_file(source_file_path:str,
     return
 
     
-def seed_all(seed: int
-             )-> None:
+def seed_all(
+    seed: int
+)-> None:
 
     """Seed for current environment instance, called once per process during async_env training
 
@@ -262,8 +278,9 @@ def seed_all(seed: int
 
 
 
-def clear_folder(folder_path: str
-                 ) -> None:
+def clear_folder(
+    folder_path: str
+) -> None:
     """
     Remove all files and subdirectories inside `folder_path`,
     but leave `folder_path` itself intact.
@@ -283,9 +300,10 @@ def clear_folder(folder_path: str
     return
 
 
-def list_2_txt(list:list, 
-               filename:str
-               )->None:
+def list_2_txt(
+    list:list, 
+    filename:str
+)->None:
     
     with open(filename, 'w') as f:
         for item in list:
@@ -294,9 +312,10 @@ def list_2_txt(list:list,
     return 
 
 
-def random_vector_know_norm(k:int,
-                          norm:float
-                          )->np.ndarray:
+def random_vector_know_norm(
+    k:int,
+    norm:float
+)->np.ndarray:
     
     """Find a vector size k, with a know final norm
     
@@ -333,8 +352,9 @@ def random_vector_know_norm(k:int,
 
 
 
-def generate_random_perpendicular_normalized_vector(n:np.ndarray
-                                                    )->np.ndarray:
+def generate_random_perpendicular_normalized_vector(
+    n:np.ndarray
+)->np.ndarray:
     
     """
     :params n: input vector (3,)
@@ -364,9 +384,10 @@ def generate_random_perpendicular_normalized_vector(n:np.ndarray
     return w
 
 
-def gen_rv0(sma:float, 
-            GM_Earth:float=3.986004415000000e+14
-            )->np.ndarray:
+def gen_rv0(
+    sma:float, 
+    GM_Earth:float=3.986004415000000e+14
+)->np.ndarray:
     """Calculate from the desired semimajor axis length the starting positon 
     and velocity vectors from a multinomial dirichlet distribution
 
@@ -385,5 +406,15 @@ def gen_rv0(sma:float,
     r = random_vector_know_norm(k=3, norm=sma)
     # a vector perpendicular to p_vector, scaled to v_norm
     v = generate_random_perpendicular_normalized_vector(r) * v_norm
-
+    
+    assert_no_nan(r,"position")
+    assert_no_nan(v,"velocity")
+    
     return np.concatenate((r, v), axis=0)
+
+def assert_no_nan(arr:Any, name:str):
+    frame = inspect.currentframe().f_back
+    assert not np.isnan(arr).any(), (
+        f"{Path(frame.f_code.co_filename).resolve()}:{frame.f_lineno}: "
+        f"{name} contains NaN:\n{arr}"
+    )
