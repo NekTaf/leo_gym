@@ -20,8 +20,9 @@ def collision_generator(
                 dt:int,
                 params_dyn:Any,
                 days:float,
-                Dlon_range:tuple=(-3e3,+3e3),
-                Decc_range:tuple=(-600,+600),
+                Dlon_range:tuple,
+                Decc_range:tuple,
+                beta_sampling_values:tuple, 
                 debug:bool=False
                 )->np.ndarray:
     
@@ -34,10 +35,28 @@ def collision_generator(
     :params params_dyn: parameters for debris object using satellite_base class, all perturbations are included
     :params Dlon_range: ROE longitude deviation applied at conjuction point [m]
     :params Decc_range: ROE eccentricity deviation applied at conjuction point [m]
+    :params beta_sampling_values: a, b beta distribution values for sampling longitude and eccentricity displacment
     :params debug: prints debug info
 
     :returns: (7,) pvm of obstacle 
     """
+    
+    u = np.random.beta(beta_sampling_values[0], beta_sampling_values[1]) 
+    Dlon = Dlon_range[0] + u * (Dlon_range[1] - Dlon_range[0])
+    
+    u = np.random.beta(beta_sampling_values[0], beta_sampling_values[1]) 
+    Decc = Decc_range[0] + u * (Decc_range[1] - Decc_range[0])  
+    
+    Droe = np.array([0,Dlon,
+                    Decc,Decc,
+                    0,0])
+    if debug:
+        print("ROE Deviation applied at conjuction point: ",Droe)
+    
+    rv0 = Delta_roe_to_rv(
+        Droe=Droe,
+        rv_ref=rv0
+    )
 
     satellite_config = SatelliteConfig(
         rv0=rv0, 
