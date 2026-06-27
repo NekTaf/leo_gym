@@ -114,16 +114,31 @@ class SatDebrisCluster():
             [0, np.random.uniform(self.cfg.C_rtn_s_ranges[1][0],self.cfg.C_rtn_s_ranges[1][1])**2, 0],
             [0, 0, np.random.uniform(self.cfg.C_rtn_s_ranges[2][0],self.cfg.C_rtn_s_ranges[2][1])**2]
             ])
+        conjunction_times:np.ndarray = (
+            np.linspace(
+                self.cfg.conjunction_time_window_index[0],
+                self.cfg.conjunction_time_window_index[1],
+                self.num_debris,
+            ) * 60 / self.cfg.dt
+        ).astype(int)
 
         
         for i in range(self.num_debris):
             
-            self.conjuction_time:int = int(
-                np.random.randint(
-                    low=self.cfg.conjunction_time_window_index[0],
-                    high=self.cfg.conjunction_time_window_index[1],
-                    dtype=int)*60/self.cfg.dt
-                )
+            self.conjuction_time:int = conjunction_times[i]    
+            
+            noise = np.random.randint(
+                -int(0.1 * (conjunction_times[-1] - conjunction_times[0])),
+                int(0.1 * (conjunction_times[-1] - conjunction_times[0])) + 1,
+            )
+            
+            self.conjuction_time = conjunction_times[i] + noise
+            # self.conjuction_time:int = int(
+            #     np.random.randint(
+            #         low=self.cfg.conjunction_time_window_index[0],
+            #         high=self.cfg.conjunction_time_window_index[1],
+            #         dtype=int)*60/self.cfg.dt
+            #     )
             
             self.conjuction_points_time.append(self.conjuction_time)
             pvm_col0 = collision_generator(
@@ -132,8 +147,11 @@ class SatDebrisCluster():
                 days=self.cfg.days,
                 relative_t_tca=int(self.conjuction_time*self.cfg.dt/self.dt_col),
                 params_dyn=self.cfg.params_dyn,
-                )
-            
+                beta_sampling_values=self.cfg.beta_sampling_values,
+                Decc_range=self.cfg.Decc_range,
+                Dlon_range=self.cfg.Dlon_range,
+            )
+                        
             self.all_object_rvm0.append(pvm_col0.tolist())
 
             # Initialize secondary debris object covariance
