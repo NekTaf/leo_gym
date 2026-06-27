@@ -15,17 +15,18 @@ from leo_gym.satellite.satellite_base import SatelliteConfig, Satellite
 from leo_gym.utils.utils import generate_random_perpendicular_normalized_vector
 from leo_gym.orbit.dynamics.conversions import Delta_roe_to_rv
 
+logger = logging.getLogger(__name__)
+
 def collision_generator(
-                rv0:np.ndarray,
-                relative_t_tca:int,
-                dt:int,
-                params_dyn:Any,
-                days:float,
-                Dlon_range:tuple,
-                Decc_range:tuple,
-                beta_sampling_values:tuple, 
-                debug:bool=False
-                )->np.ndarray:
+    rv0:np.ndarray,
+    relative_t_tca:int,
+    dt:int,
+    params_dyn:Any,
+    days:float,
+    Dlon_range:tuple,
+    Decc_range:tuple,
+    beta_sampling_values:tuple, 
+)->np.ndarray:
     
     """Generates starting coordinates for debris collision 
     
@@ -84,24 +85,22 @@ def collision_generator(
         if abs(np.dot(v_vector, old_v)) < 0.95 * v_norm**2:   # reject if too similar
             break
 
-    
-    
     object_secondary.rvm_eci_states[-1] = np.concatenate((p_vector,v_vector,object_secondary.rvm_eci_states[-1][6:7]),axis=0)
-    Dlon = np.random.uniform(*Dlon_range)
-    Decc = np.random.uniform(*Decc_range)
+    # Dlon = np.random.uniform(*Dlon_range)
+    # Decc = np.random.uniform(*Decc_range)
     
-    Droe = np.array([0,Dlon,
-                    Decc,Decc,
-                    0,0])
-    if debug:
-        print("ROE Deviation applied at conjuction point: ",Droe)
+    # Droe = np.array([0,Dlon,
+    #                 Decc,Decc,
+    #                 0,0])
+    # if debug:
+    #     print("ROE Deviation applied at conjuction point: ",Droe)
     
-    new_rv = Delta_roe_to_rv(
-        Droe=Droe,
-        rv_ref=object_secondary.rvm_eci_states[-1][:6]
-    )
+    # new_rv = Delta_roe_to_rv(
+    #     Droe=Droe,
+    #     rv_ref=object_secondary.rvm_eci_states[-1][:6]
+    # )
     
-    object_secondary.rvm_eci_states[-1][:6] = new_rv
+    # object_secondary.rvm_eci_states[-1][:6] = new_rv
     
     # do back propagation to get starting relative position and velocity vectors for debris
     object_secondary.dt = -abs(object_secondary.dt)
