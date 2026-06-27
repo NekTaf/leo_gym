@@ -4,6 +4,7 @@ import random
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional, Tuple
+import logging
 
 # Third-party
 import gymnasium as gym
@@ -23,7 +24,7 @@ from leo_gym.satellite.sat_debris_cluster import (
     SatDebrisClusterConfig,
 )
 from leo_gym.utils.matplot_style_cfg import *
-from leo_gym.utils.utils import seed_all
+from leo_gym.utils.utils import *
 from pathlib import Path
 import json 
 
@@ -112,7 +113,7 @@ class CamEnv(gym.Env):
         
         # Secondary debvris object values non_singular_oe
         non_singular_oe_s = np.array(self.DebrisSwarm_1.non_singular_oe[1:])[:,-1, :] 
- 
+
         adl = roe[-1][1]/1e3 # convert to km to normalize // range: 0 - -/+5
         adex = roe[-1][2]/1e2 # convert to km to normalize // range: 0 - -/+ 9
         adey = roe[-1][3]/1e2 # convert to km to normalize // range 0 - -/+ 9
@@ -208,6 +209,15 @@ class CamEnv(gym.Env):
                 delta_r_b = np.array(self.DebrisSwarm_1.delta_r_b_plane[i][-1]).reshape(2,)
                 delta_r_b = delta_r_b/5e2
                 
+                assert_no_nan(u_s, "u_s")
+                assert_no_nan(inc_s, "inc_s")
+                assert_no_nan(raan_s, "raan_s")
+                assert_no_nan(tca_till, "tca_till")
+                assert_no_nan(det_cov_scaled, "det_cov_scaled")
+                assert_no_nan(combined_radius, "combined_radius")
+                assert_no_nan(p_max_at_tca, "p_max_at_tca")
+                assert_no_nan(delta_r_b, "delta_r_b")
+                
                 if not self.cfg.reduced_obs:
                     obs_debris[i,:] = np.concatenate((
                         u_s,
@@ -245,50 +255,66 @@ class CamEnv(gym.Env):
         P_max_product = abs(1 - np.prod(1 - P_max_propagated[:,1]))        
 
         # Recovery phase rewards
-        if P_max_product == 0: #No more debris, P_max list empty
-            if self.debug:
-                print("P_max_product =", P_max_product)
-            # Check if any collisions occurred 
-            for i in range(self.DebrisSwarm_1.num_debris):
-                try:
-                    conjuction_time = self.DebrisSwarm_1.conjuction_points_time[i]
-                    p_max = self.DebrisSwarm_1.sat_debris_mahala[1+i][conjuction_time][1] 
-                    if self.debug:
-                        print("checking debris", i)
-                        print("p_max =", p_max)
-                        print("limit =", self.cfg.p_max_limit)
+        # Check if any collisions occurred 
+        for i in range(self.DebrisSwarm_1.num_debris):
+            try:
+                conjunction_time = self.DebrisSwarm_1.conjuction_points_time[i]
 
-                    if p_max>=self.cfg.p_max_limit: # Propagation index
-                        reward = -100
-                        terminated = True
-                        return reward, terminated
+                # Skip debris whose TCA has not occurred yet
+                if self.DebrisSwarm_1.n <= conjunction_time:
                     
-                except IndexError:
-                    pass
+                    if P_max_product<=self.cfg.p_max_limit: # No collision risk
+                        self.logger.debug("No Collision Risk")
+                        self.logger.debug("reward: %s", reward)
 
+                        reward = +10-abs(self.delta_t0_and_man[1]/5*np.sign(self.f_direction[1]))
+                        
+                    else: # collision risk
+                        reward = np.minimum(10,-np.log(P_max_product)-15)
+
+
+                p_max = self.DebrisSwarm_1.sat_debris_object_collision_metrics[1 + i][conjunction_time][1]
+                self.logger.debug("P_max_%s: %s", i, p_max)
+
+
+                if p_max >= self.cfg.p_max_limit:
+                    reward = -100
+                    terminated = True
+
+                    self.logger.debug("Collision occurred")
+                    self.logger.debug("P_max = %s", p_max)
+                    self.logger.debug("reward: %s", reward)
+                    
+                    return reward, terminated
+
+            except (IndexError, KeyError):
+                continue
+            
+            
             if  ade<=self.cfg.ade_norm_req and abs(adl)<=self.cfg.adl_req:
                 reward = +1e3
                 terminated = True
                 
-                return reward, terminated
-
             else:           
                 adl_based_weight = (abs(adl)/self.cfg.adl_req)
                 ade_based_weight = (ade/self.cfg.ade_norm_req)
 
                 reward = (-adl_based_weight -ade_based_weight)/3
                 
-                return reward, terminated
+            self.logger.debug("Recovery")
+            self.logger.debug("limit = %s", self.cfg.p_max_limit)
+            self.logger.debug("P_max_product = %s", P_max_product)
+            self.logger.debug("reward: %s", reward)
 
-        # CAM phase rewards
-        elif P_max_product<=self.cfg.p_max_limit:
-            reward = 0
-            
-        else:
-            reward = -np.log(P_max_product) -9 
-                
-        reward = reward - self.delta_t0_and_man[1]/2
-        
+
+            return reward, terminated
+
+                        
+        self.logger.debug("CAM")
+        self.logger.debug("limit = %s", self.cfg.p_max_limit)
+        self.logger.debug("P_max_product = %s", P_max_product)
+        self.logger.debug("reward: %s", reward)
+
         return reward, terminated
                 
                 
@@ -346,6 +372,7 @@ class CamEnv(gym.Env):
         self.rewards_plot_list.append(reward)
         self.n_plot_list.append(self.DebrisSwarm_1.n)
         
+        self.logger.debug("\n====================")            
         return self._observation_states(), reward, terminated, truncated, info
 
 
