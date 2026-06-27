@@ -64,32 +64,38 @@ class CamEnv(gym.Env):
 
     """
 
-    def __init__(self, 
-                 cfg:CamEnvConfig|str|Path,
-                 seed:int,
-                 debug:bool=False):
+    def __init__(
+        self, 
+        cfg:CamEnvConfig|str|Path,
+        seed:int):
         
         super(CamEnv, self).__init__()
         
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("Intialzing CAM environment")
+
         self.load_cfg(cfg)
         seed_all(seed)        
         self.reset()
-        self.debug=debug
         
         
-        self.action_space = spaces.Dict({
+        self.action_space = spaces.Dict(
+            {
             "discrete": spaces.Discrete(3),
-            "continuous": spaces.Box(low=np.array(self.cfg.low_action), 
-                                       high=np.array(self.cfg.high_action), 
-                                       shape=(2,), 
-                                       dtype=np.float64)
-        })
+            "continuous": spaces.Box(
+                low=np.array(self.cfg.low_action), 
+                high=np.array(self.cfg.high_action), 
+                shape=(2,), 
+                dtype=np.float64)
+            }
+        )
                     
         if self.cfg.reduced_obs:
+            self.logger.info("Using Reduced Observations")
             self.observation_space = spaces.Box(
                 low=-np.inf,
                 high=np.inf,
-                shape=(6,),
+                shape=(4 + self.cfg.debris_cluster_config.max_debris * 4,),
                 dtype=np.float64
             )
         else:
@@ -134,7 +140,7 @@ class CamEnv(gym.Env):
                 adex, 
                 adey))
         else:
-            obs_debris = np.zeros((self.DebrisSwarm_1.num_debris,2))
+            obs_debris = np.zeros((self.DebrisSwarm_1.cfg.max_debris, 4))
 
             obs_satellite = np.array([
                 u_p,
@@ -231,7 +237,8 @@ class CamEnv(gym.Env):
                 else:
                     obs_debris[i,:] = np.concatenate((
                         tca_till,
-                        p_max_at_tca
+                        p_max_at_tca,
+                        delta_r_b
                         ), axis=0)
 
         obs_debris = np.array(obs_debris)
@@ -348,7 +355,7 @@ class CamEnv(gym.Env):
         P_max_product = abs(1 - np.prod(1 - P_max_propagated[:,1]))      
         
         if P_max_product<=self.cfg.p_max_limit and P_max_product != 0:
-           self.f_direction = [0,0] 
+            self.f_direction = [0,0] 
 
         
         manplan = self.f_direction + delay_duration_thrust.tolist()
