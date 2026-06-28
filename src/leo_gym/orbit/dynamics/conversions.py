@@ -14,7 +14,6 @@ from zendir.maths.astro import (
 )
 
 
-
 def minpipi(x):
     """
     Wrap angle(s) to the range (-π, π].
@@ -38,9 +37,7 @@ def zero2twopi(x):
 def rv_to_roe_and_nsoe(
     rv_d: NDArray,
     rv_c: NDArray
-    ) -> Tuple[NDArray, 
-               NDArray, 
-               NDArray]:
+) -> Tuple[NDArray, NDArray, NDArray]:
     
     """
     Convert Cartesian state vectors into relative orbital elements (ROE)
@@ -141,8 +138,21 @@ def _normc(m):
 def rv_2_non_singular_oe(
     rv:NDArray, 
     mu:float=3.986004415000000e+14
-    )-> NDArray:
+)-> NDArray:
+    """
+    Conver ECI position velocity state vector to 
+    non-singular orbital elements
     
+    :param rv: position velocity with size (6,)
+    :type rv: arr
+    :param mu: Earth standard gravitational parameter
+    :type mu: float
+    :return: non singular orbital elements with size (7,) 
+        [a, ex, ey, -i, RAAN, u, la], where
+        ex = e cos(ω), ey = e sin(ω),
+        u = M + ω, and la = ν + ω.
+    :rtype: arr
+    """
     
     rv = rv.reshape(6, 1)
     n = rv.shape[1]
@@ -188,10 +198,13 @@ def rv_2_non_singular_oe(
     
     return oe_ns
 
-def calculate_ecc_anomaly(M:float, 
-                          ecc:float,
-                          tol:float=1e-10,
-                          maxIter:int=20):
+def calculate_ecc_anomaly(
+    M:float, 
+    ecc:float,
+    tol:float=1e-10,
+    maxIter:int=20
+):
+    
     M = np.mod(M, 2 * np.pi)
     E = np.where(M > np.pi, M - ecc, M + ecc)
     for iter_count in range(maxIter):
@@ -203,21 +216,23 @@ def calculate_ecc_anomaly(M:float,
         raise RuntimeError(f'Not converged in {maxIter} iterations')
     return E
 
-def calculate_true_anomaly(M: float, 
-                           ecc: float, 
-                           tol:float=1e-10,
-                           maxIter:int=20
-                           )-> float:
+def calculate_true_anomaly(
+    M: float, 
+    ecc: float, 
+    tol:float=1e-10,
+    maxIter:int=20
+)-> float:
     
     E = calculate_ecc_anomaly(M, ecc, tol, maxIter)
     TA = np.mod(2 * np.arctan(np.tan(E / 2) * np.sqrt((1 + ecc) / (1 - ecc))), 2 * np.pi)
     return TA
 
 
-def osc_2_mean_non_singular_oe_brouwer_lyddane_method(oe:NDArray, 
-                                                      r_E:float=6378136.3,
-                                                      j2:float=1082.19e-6
-                                                      )->NDArray:
+def osc_2_mean_non_singular_oe_brouwer_lyddane_method(
+    oe:NDArray, 
+    r_E:float=6378136.3,
+    j2:float=1082.19e-6
+)->NDArray:
     """
     Convert osculating non-singular orbital elements to mean non-singular orbital elements 
     using the Brouwer–Lyddane analytical method.
@@ -356,8 +371,7 @@ def dcm_eci_2_pf(
     inc:float, 
     raan:float, 
     aop:float
-    )->NDArray:
-    
+)->NDArray:
     """
     ECI to Perifocal frame 
     
@@ -368,7 +382,7 @@ def dcm_eci_2_pf(
     :returns: Direction Cosine Matrix ECI->PF (arr (3,3))
     
     """
-
+    
     dcm = np.zeros((3, 3))
 
     dcm[0, 0] = np.cos(raan) * np.cos(aop) - np.sin(raan) * np.sin(aop) * np.cos(inc)
@@ -389,7 +403,7 @@ def rv_2_kepler_oe_pyorb(
     rv:NDArray,
     mu:float=3.986004415000000e+14, 
     degrees:bool=False
-    )->NDArray:
+)->NDArray:
     """Cartesian to orbital elelment wrapper
     
     :param rv: ECI position and velocity vector (6,)
@@ -404,11 +418,11 @@ def rv_2_kepler_oe_pyorb(
     return kep
 
 
-def kepler_oe_2_rv_pyorb(oe_kep:NDArray,
-                         mu:float=3.986004415000000e+14,
-                         degrees:bool=False
-                         )-> NDArray:
-    
+def kepler_oe_2_rv_pyorb(
+    oe_kep:NDArray,
+    mu:float=3.986004415000000e+14,
+    degrees:bool=False
+)-> NDArray:
     r"""
     Orbital element to Cartesian wrapper.
 
@@ -418,24 +432,32 @@ def kepler_oe_2_rv_pyorb(oe_kep:NDArray,
     :return: Cartesian state vector in the ECI frame (arr of shape (6,))
     """
     
-    rv = pyorb.kep_to_cart(oe_kep, 
-                           mu=mu, 
-                           degrees=degrees,)
+    rv = pyorb.kep_to_cart(
+        oe_kep, 
+        mu=mu, 
+        degrees=degrees,
+    )
+    
     return rv
 
 
-def delta_rv_rtn(rv_1:NDArray, 
-                 rv_2:NDArray)->NDArray:
+def delta_rv_rtn(
+    rv_1:NDArray, 
+    rv_2:NDArray
+)->NDArray:
     r"""
-    Orbital element to Cartesian wrapper.
-
-    :param oe: Classical Keplerian orbital elements (a, e, i, \omega, \Omega, \nu) (arr of shape (6,))
-    :param mu: Gravitational parameter, defaults to Earth's $\mu$ if not provided (float, optional)
-    :param degrees: If True, input angles are in degrees; if False, in radians (bool)
-    :return: Cartesian state vector in the ECI frame (arr of shape (6,))
+    Cartesian separation in RTN frame 
+    
+    :param rv_1: First pos,vel ECI vector with shape (6,)
+    :type rv_1: arr
+    :param rv_2: Second pos,vel ECI vector with shape (6,)
+    :type rv_2: arr
+    :return: Relative state vector in RTN frame
+    :rtype: arr
     """
+    
     A = dcm_eci_2_rtn(rv_1[:3],rv_1[3:6])
-    seperation = A@(rv_1[:3]-rv_2[:3])
+    seperation = A@(rv_1-rv_2)
     
     return seperation
 
@@ -448,10 +470,14 @@ def dcm_eci_2_rtn(
     """
     Hill frame transformation DCM from ECI to RTN.
 
-    :param r: ECI position vector (arr of shape (3,))
-    :param v: ECI velocity vector (arr of shape (3,))
-    :return: ECI→RTN direction cosine matrix (arr of shape (3,3))
+    :param r: ECI position vector with shape (3,)
+    :type r: arr
+    :param v: ECI velocity vector with shape (3,)
+    :type v: arr
+    :return: ECI to RTN Direction Cosine Matrix with shape (3,3)
+    :rtype: arr
     """
+    
     r_norm = r / np.linalg.norm(r)
     v_norm = v / np.linalg.norm(v)
     # Orbit normal
@@ -469,9 +495,12 @@ def dcm_eci_2_b_plane(
     """
     Matrix for frame conversion from ECI to B-plane.
 
-    :param rv_p: Primary object Cartesian state vector (arr of shape (6,))
-    :param rv_s: Secondary object Cartesian state vector (arr of shape (6,))
-    :return: Direction cosine matrix for the conversion (arr of shape (3,3))
+    :param rv_p: Primary object Cartesian state vector with shape (6,)
+    :type rv_p: arr
+    :param rv_s: Secondary object Cartesian state vector with shape (6,)
+    :type rv_s: arr
+    :return: DCM for the conversion with shape (3,3)
+    :rtype: arr
     """
         
     eta = (rv_p[3:6] - rv_s[3:6])/np.linalg.norm(rv_p[3:6] - rv_s[3:6])    
@@ -511,16 +540,17 @@ def covariance_converisions(
     C_rtn_p:NDArray, 
     C_rtn_s:NDArray
 )->Tuple[NDArray,NDArray]:
-
     """
     Convert combined covariance between primary (satellite) and secondary (debris) objects.
 
-    :param rv_p: Primary object Cartesian state vector (arr of shape (6,))
-    :param rv_s: Secondary object Cartesian state vector (arr of shape (6,))
-    :return: 
-        - Combined covariance matrix in the B-plane frame (arr)
-        - Combined covariance matrix in the ECI frame (arr)
+    :param rv_p: Primary object Cartesian state vector with shape (6,)
+    :type rv_p: arr
+    :param rv_s: Secondary object Cartesian state vector with shape (6,)
+    :type rv_s: arr
+    :return: Tuple of the Combined covariance matrix in the B-plane and ECI frame
+    :rtype: tuple[arr,arr]
     """
+    
     R_eci2rtn_p = dcm_eci_2_rtn(r=np.array(rv_p).reshape(-1)[:3], 
                                 v=np.array(rv_p).reshape(-1)[3:6])
     
@@ -545,7 +575,6 @@ def Delta_roe_to_rv(
     Droe:NDArray,
     rv_ref:NDArray
 )-> NDArray:
-
     """
     Returns real trajectory point based on displacement ROE vector
     and nominal trajectory  
@@ -553,6 +582,7 @@ def Delta_roe_to_rv(
     :param Droe: (arr (6,)) Displacement in ROE [da,dl,dex,dey,dix,diy]
     :param rv_ref: (arr (6,)) Postion velocity vector 
     """
+    
     rv_ref = np.asarray(rv_ref).reshape(-1)   # shape (6,)
 
     oe_kep_ref = vector_to_classical_elements(
