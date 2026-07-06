@@ -93,7 +93,7 @@ def run(rank, size, data_dir, seed):
             observations.append(obs)
 
             if terminated or truncated:
-                radial = [c[0] for c in env.DebrisSwarm_1.controls_RTN]
+                radial = [c[0] for c in env.DebrisSwarm_1.forces_rtn]
                 P_max = [x for x in env.DebrisSwarm_1.p_max_predictions if x != 0]
                 stats.append({
                     'p_max_start': P_max[0],

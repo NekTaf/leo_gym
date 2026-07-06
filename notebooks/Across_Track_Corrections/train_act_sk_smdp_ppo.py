@@ -6,17 +6,18 @@ from leo_gym.rl_algorithms.ppo_sb3_smdp.ppo_sb3_smdp import SMDP_PPO
 import random
 import mlflow
 
-from libs.leo_gym.notebooks.C2_Across_Track_Corrections.train_act_sk_cfg import env_cfg, sat_cfg, ppo_cfg, ppo_smdp_cfg, NUM_ENV, SEED
+from .train_act_sk_cfg import env_cfg, sat_cfg, ppo_cfg, ppo_smdp_cfg, NUM_ENV, SEED
 from leo_gym.utils.utils import seed_all
 from dataclasses import asdict, dataclass, replace
 from leo_gym.utils.sb3_mlflow_loggers import CustomCheckpoint, loggers
 from urllib.parse import urlparse
 
 
-def make_env(config:RoeGymConfig, 
-             seeds: List[int],
-             idx:int
-             )->RoeGym:
+def make_env(
+    config:RoeGymConfig, 
+    seeds: List[int],
+    idx:int
+)->RoeGym:
     def _init():
         seed = seeds[idx]
         env = RoeGym(cfg=config, seed=seed)
@@ -33,8 +34,12 @@ if __name__ == '__main__':
         SEEDS = [random.randint(0, 2**32 - 1) for _ in range(NUM_ENV)]
         print(SEEDS)
         
-        mlflow.log_params({"env_number":NUM_ENV,
-                           "global_seed":SEED})
+        mlflow.log_params(
+            {
+                "env_number":NUM_ENV,
+                "global_seed":SEED
+            }
+        )
 
         env_fns = [make_env(env_cfg,SEEDS,i) for i in range(NUM_ENV)]
         vec_env = SubprocVecEnv(env_fns) 
@@ -47,15 +52,19 @@ if __name__ == '__main__':
         model.set_logger(loggers)
         ckpt_dir = urlparse(mlflow.get_artifact_uri("models")).path
 
-        save_policy_callback = CustomCheckpoint(ckpt_dir,
-                                                name_prefix="ppo_smdp_act_sk", 
-                                                save_freq=100_000)
+        save_policy_callback = CustomCheckpoint(
+            ckpt_dir,
+            name_prefix="ppo_smdp_act_sk", 
+            save_freq=100_000
+        )
         
         try:
                 
-            model.learn(total_timesteps=5_000_000, 
-                        progress_bar=True,
-                        callback=save_policy_callback)
+            model.learn(
+                total_timesteps=5_000_000, 
+                progress_bar=True,
+                callback=save_policy_callback
+            )
             
         except KeyboardInterrupt:
             model.save("ppo_smdp_act_sk")

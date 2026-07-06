@@ -45,31 +45,35 @@ satellite_params = {
         "As": 1.3,
         "mf": 136,
     },
-    "rv0":np.array([-475449.609559833, 277131.557120858, 7553438.90796208,
-                    -7238.56711050838, -16.6455796498367, -454.213727291452])}
+    "rv0":np.array(
+        [-475449.609559833, 277131.557120858, 7553438.90796208,
+        -7238.56711050838, -16.6455796498367, -454.213727291452]
+    )
+}
 
 sat_cfg = SatelliteROEConfig(**satellite_params)
 
 
-env_cfg = RoeGymConfig(high_action=[15.0,110,41],
-                         low_action=[-15.0,10,1],
-                         no_timesteps=20,
-                         dt=60,
-                         flag_man_type="act",
-                         
-                         Droe_ranges=[
-                            [0,0],
-                            [0,0],
-                            [0.0,0.0],
-                            [0.0,0.0], 
-                            [-800, +800],
-                            [-800,+800]],
-                         
-                         ada_target=50,
-                         adi_norm_cutoff=1500,
-                         adi_norm_target=100,
-                         Delta_ada_targ=50,
-                         satellite_params=sat_cfg)
+env_cfg = RoeGymConfig(
+    high_action=[15.0,110,41],
+    low_action=[-15.0,10,1],
+    no_timesteps=20,
+    dt=60,
+    flag_man_type="act",
+    Droe_ranges=[
+        [0,0],
+        [0,0],
+        [0.0,0.0],
+        [0.0,0.0], 
+        [-800, +800],
+        [-800,+800]
+    ],
+    ada_target=50,
+    adi_norm_cutoff=1500,
+    adi_norm_target=100,
+    Delta_ada_targ=50,
+    satellite_params=sat_cfg
+)
 
 NUM_ENV = 1
 
@@ -103,7 +107,6 @@ class PpoCfg():
     )
     def __post_init__(self):
         self.batch_size = int(NUM_ENV * self.n_steps)
- 
 
 ppo_cfg = PpoCfg()
 ppo_smdp_cfg = PpoSmdpCfg()

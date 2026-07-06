@@ -13,7 +13,6 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field, replace
 from typing import List, Optional
-from pathlib import Path
 
 # Third-party
 import gymnasium as gym
@@ -44,14 +43,22 @@ from leo_gym.rl_algorithms.h_ppo.actor_critic_nets import (
     ObservationEncoder,  # make sure this is exported in the module
 )
 
+from functools import partial
 
+
+import logging
+
+# logging.basicConfig(level=logging.DEBUG) 
+
+# logging.disable(logging.CRITICAL)
+logging.basicConfig(level=logging.INFO)
 
 # ===== Environment configurations =====
 env_cfg = CamEnvConfig(
     high_action=[55, 41],
     low_action=[9, 1],
     
-    reduced_obs = False,
+    reduced_obs = True,
     
     # Change action space as to not allign with opposite sides of the orbit
     # high_action=[20, 15],
@@ -98,11 +105,11 @@ env_cfg = CamEnvConfig(
             As=1.3,
             mf=136
         ),
-        days=2,
+        days=1,
         dt=60,
         max_debris=1,
         min_debris=1,
-        conjunction_time_window_index=[650, 800],
+        conjunction_time_window_index=(300, 900),
         Droe_ranges=[
             [0,0], #ada
             
@@ -118,18 +125,25 @@ env_cfg = CamEnvConfig(
             [0,0] #adiy
         ],
         C_rtn_s_ranges = [
-            [50,100],
-            [100,200],
-            [50,100]
+            [100,300],
+            [200,400],
+            [100,300]
         ],
         
         C_rtn_p_ranges = [
-            [10,50],
-            [50,100],
-            [10,50]
+            [50,200],
+            [100,300],
+            [50,200]
         ],
 
-        radius_combined_ranges=[10,75],
+        radius_combined_ranges=(25,75),
+        
+        beta_sampling_values=(0.8,0.8),
+        Dlon_range=(-3e3,3e3),
+        # Dlon_range=(-0,0),
+
+        Decc_range=(0,0),
+
     ),
 )
 
@@ -140,12 +154,12 @@ ppo_cfg = PPOConfig(
     gamma=0.99,
     policy_clip=0.2,
     gae_lambda=0.95,
-    lr=3e-4,
+    lr=3e-3,
     init_entropy_coef=0.001,
-    batch_size=8000,
+    batch_size=4000,
     target_kl=0.05,
     lr_decay_coef=0,
-    epochs=5,
+    epochs=10,
     n_envs=400,
     normalize_advantage=True,
     init_std=[0.4, 0.4],
@@ -158,21 +172,6 @@ ppo_cfg = PPOConfig(
     observation_encoder=ObservationEncoder,
     steps_per_env=20,
     save_nets_period=int(13),
-    max_training_timesteps=int(7e6),
+    max_training_timesteps=int(3e6),
     trained_algorithm_config_path = None
-
-)
-
-
-class TrainingConfig(BaseModel):
-    tracking_uri: Optional[str] = None
-    experiment_name: Optional[str] = None
-    run_name: Optional[str] = None
-    seed: Optional[int] = None
-    model_config = ConfigDict(frozen=True)
-
-training_cfg = TrainingConfig(
-    tracking_uri = str(Path.home() / "mlruns")
-    experiment_name="cam_shap",
-    run_name= None,
 )

@@ -48,16 +48,19 @@ class CamEnvConfig(BaseModel):
 
 
 class CamEnv(gym.Env):
-    
     """
-    Notes: 
-    + Subscript _p denotes primary satellite 
-    + Subscript _s denotes secondary debris objects
-    + TCA stands for time of closest approach where collision happens 
-    + For data, interact with SatDebrisCluster object containing satellite and debris data and propagation function
-    + Config function for object defining satellite and debris parameters is 
-    required, they are assumed to be identical in this example
+    Satellite-Debris gym environemnt for training LEO collision acoidance policies.
 
+    Notes:
+        - Subscript `_p` denotes the primary satellite.
+        - Subscript `_s` denotes secondary debris objects.
+        - TCA (Time of Closest Approach) is the instant at which a collision
+        would occur.
+        - Data are managed through the `SatDebrisCluster` object, which stores
+        satellite and debris data and provides propagation functionality.
+        - A configuration function is required to define the satellite and
+        debris parameters. In this example, the parameters are assumed to be
+        identical.
     """
 
     def __init__(
@@ -101,127 +104,140 @@ class CamEnv(gym.Env):
                 shape=(int(6+self.cfg.debris_cluster_config.max_debris*9),),
                 dtype=np.float64
             )
-                
         
-
-                        
     
     def _observation_states(self)->NDArray[np.float64]:
         # Relative orbital elements between satellite and unperturbated trajectory
         roe = np.array(self.DebrisSwarm_1.roe)
         
         # Primary satellite non_singular_oe
-        non_singular_oe_p = np.array(self.DebrisSwarm_1.non_singular_oe[0:1])[:,-1, :].reshape(6,) 
+        non_singular_oe_p = np.array(self.DebrisSwarm_1.nsoe_sat)[-1].reshape(6,) 
         
         # Secondary debvris object values non_singular_oe
-        non_singular_oe_s = np.array(self.DebrisSwarm_1.non_singular_oe[1:])[:,-1, :] 
-
-        adl = roe[-1][1]/1e3 # convert to km to normalize // range: 0 - -/+5
-        adex = roe[-1][2]/1e2 # convert to km to normalize // range: 0 - -/+ 9
-        adey = roe[-1][3]/1e2 # convert to km to normalize // range 0 - -/+ 9
+        non_singular_oe_s = np.array([nsoe[-1] for nsoe in self.DebrisSwarm_1.nsoe_debris])
         
-        u_p = non_singular_oe_p[1] # range 0 - 6 no need to normalize
-        inc_p = non_singular_oe_p[4] # range 0 - 6 no need to normalize
-        raan_p = non_singular_oe_p[5] #range 0 - 6 no need to normalize
+        # convert to km to normalize // range: 0 - -/+5
+        adl = roe[-1][1]/1e3 
+        
+        # convert to km to normalize // range: 0 - -/+ 9
+        adex = roe[-1][2]/1e2 
+        
+        # convert to km to normalize // range 0 - -/+ 9
+        adey = roe[-1][3]/1e2 
+        
+        # range 0 - 6 no need to normalize
+        u_p = non_singular_oe_p[1] 
+        
+        # range 0 - 6 no need to normalize
+        inc_p = non_singular_oe_p[4]
+        
+        #range 0 - 6 no need to normalize
+        raan_p = non_singular_oe_p[5] 
 
         if not self.cfg.reduced_obs:
             obs_debris = np.zeros((self.DebrisSwarm_1.cfg.max_debris,9))
 
             # Observations of primary satellite 
-            obs_satellite = np.array((
-                u_p,
-                inc_p,
-                raan_p,
-                adl,
-                adex, 
-                adey))
+            obs_satellite = np.array(
+                (
+                    u_p,
+                    inc_p,
+                    raan_p,
+                    adl,
+                    adex, 
+                    adey
+                )
+            )
         else:
             obs_debris = np.zeros((self.DebrisSwarm_1.cfg.max_debris, 4))
 
-            obs_satellite = np.array([
-                u_p,
-                adl,
-                adex,
-                adey])        
+            obs_satellite = np.array(
+                [
+                    u_p,
+                    adl,
+                    adex,
+                    adey
+                ]
+            )        
         
-        P_max_propagated = np.array(self.DebrisSwarm_1.metrics_at_tca)
+        latest_metrics = self.DebrisSwarm_1.metrics_at_tca[-1]
 
-        for i, (nsoe) in enumerate(non_singular_oe_s):
-        
-            # discrete conjuction time (discretized dt=60s)
+        for i, nsoe in enumerate(non_singular_oe_s):
+
             tca_true = self.DebrisSwarm_1.conjuction_points_time[i]
-            tca_till = np.array(tca_true - self.DebrisSwarm_1.n).reshape(1,)
+            tca_till = np.array([tca_true - self.DebrisSwarm_1.dt_steps])
 
-            if np.sign(tca_till) == -1: 
-                # no observations if tca is past
-                pass
-            
-            else:             
-                # log to normalize
-                p_max_at_tca = np.array([np.log((P_max_propagated[i,1]))]) 
-                
-                ## Min-Max scale to -/+2.5
-                C_min = np.array([
-                    [self.cfg.debris_cluster_config.C_rtn_s_ranges[0][0]**2 + \
-                        self.cfg.debris_cluster_config.C_rtn_p_ranges[0][0]**2, 0, 0],
-                    [0, self.cfg.debris_cluster_config.C_rtn_s_ranges[1][0]**2 +\
-                        self.cfg.debris_cluster_config.C_rtn_p_ranges[1][0]**2, 0],
-                    [0, 0, self.cfg.debris_cluster_config.C_rtn_s_ranges[2][0]**2 +\
-                        self.cfg.debris_cluster_config.C_rtn_p_ranges[2][0]**2]
-                ])
-                C_max = np.array([
-                    [self.cfg.debris_cluster_config.C_rtn_s_ranges[0][1]**2 + \
-                        self.cfg.debris_cluster_config.C_rtn_p_ranges[0][1]**2, 0, 0],
-                    [0, self.cfg.debris_cluster_config.C_rtn_s_ranges[1][1]**2 +\
-                        self.cfg.debris_cluster_config.C_rtn_p_ranges[1][1]**2, 0],
-                    [0, 0, self.cfg.debris_cluster_config.C_rtn_s_ranges[2][1]**2 +\
-                        self.cfg.debris_cluster_config.C_rtn_p_ranges[2][1]**2]
-                ])
+            if tca_till[0] < 0:
+                continue
 
+            metric = latest_metrics[i]
 
-                # Min-Max scale to into [–5,+5]
-                # precompute their inv-sqrt‐dets
-                _, logdet_min = np.linalg.slogdet(C_min)
-                _, logdet_max = np.linalg.slogdet(C_max)
-                
-                norm_min = np.exp(-0.5 * logdet_min)
-                norm_max = np.exp(-0.5 * logdet_max)
-                
-                C = self.DebrisSwarm_1.C_eci_combined[i]   
-                _, logdet = np.linalg.slogdet(C)
-                
-                inv_sqrt_det = np.array([np.exp(-0.5 * logdet)])
-                det_cov_scaled = 10 * (inv_sqrt_det - norm_min) / (norm_max - norm_min) - 5
-                
-                self.inv_sqrt_det=inv_sqrt_det
+            p_max_at_tca = np.array([np.log(max(metric[1], 1e-12))])
 
-                # Same for collision radius
-                combined_radius = self.DebrisSwarm_1.radius_combined[i]
-                combined_radius = 10 * (combined_radius - self.cfg.debris_cluster_config.radius_combined_ranges[0])\
-                    / (self.cfg.debris_cluster_config.radius_combined_ranges[1] - self.cfg.debris_cluster_config.radius_combined_ranges[0]) - 5
-                combined_radius = np.array([combined_radius]).reshape(1,)
-                
-                # Convert from minutes to hours
-                tca_till = tca_till/60 
+            # Min-Max scale covariance determinant
+            c_min = np.array(
+                [
+                    [self.cfg.debris_cluster_config.C_rtn_s_ranges[0][0]**2 +
+                    self.cfg.debris_cluster_config.C_rtn_p_ranges[0][0]**2, 0, 0],
+                    [0, self.cfg.debris_cluster_config.C_rtn_s_ranges[1][0]**2 +
+                    self.cfg.debris_cluster_config.C_rtn_p_ranges[1][0]**2, 0],
+                    [0, 0, self.cfg.debris_cluster_config.C_rtn_s_ranges[2][0]**2 +
+                    self.cfg.debris_cluster_config.C_rtn_p_ranges[2][0]**2]
+                ]
+            )
 
-                u_s = np.array([nsoe[1]]) # range 0 - 6 no need to normalize
-                inc_s = np.array([nsoe[4]]) # range 0 - 6 no need to normalize
-                raan_s = np.array([nsoe[5]]) # range 0 - 6 no need to normalize
-                
-                delta_r_b = np.array(self.DebrisSwarm_1.delta_r_b_plane[i][-1]).reshape(2,)
-                delta_r_b = delta_r_b/5e2
-                
-                assert_no_nan(u_s, "u_s")
-                assert_no_nan(inc_s, "inc_s")
-                assert_no_nan(raan_s, "raan_s")
-                assert_no_nan(tca_till, "tca_till")
-                assert_no_nan(det_cov_scaled, "det_cov_scaled")
-                assert_no_nan(combined_radius, "combined_radius")
-                assert_no_nan(p_max_at_tca, "p_max_at_tca")
-                assert_no_nan(delta_r_b, "delta_r_b")
-                
-                if not self.cfg.reduced_obs:
-                    obs_debris[i,:] = np.concatenate((
+            c_max = np.array(
+                [
+                    [self.cfg.debris_cluster_config.C_rtn_s_ranges[0][1]**2 +
+                    self.cfg.debris_cluster_config.C_rtn_p_ranges[0][1]**2, 0, 0],
+                    [0, self.cfg.debris_cluster_config.C_rtn_s_ranges[1][1]**2 +
+                    self.cfg.debris_cluster_config.C_rtn_p_ranges[1][1]**2, 0],
+                    [0, 0, self.cfg.debris_cluster_config.C_rtn_s_ranges[2][1]**2 +
+                    self.cfg.debris_cluster_config.C_rtn_p_ranges[2][1]**2]
+                ]
+            )
+
+            _, logdet_min = np.linalg.slogdet(c_min)
+            _, logdet_max = np.linalg.slogdet(c_max)
+
+            norm_min = np.exp(-0.5 * logdet_min)
+            norm_max = np.exp(-0.5 * logdet_max)
+
+            c_eci_comb = self.DebrisSwarm_1.c_eci_combined[i]
+            _, logdet = np.linalg.slogdet(c_eci_comb)
+
+            inv_sqrt_det = np.array([np.exp(-0.5 * logdet)])
+            det_cov_scaled = 10 * (inv_sqrt_det - norm_min) / (norm_max - norm_min) - 5
+
+            combined_radius = self.DebrisSwarm_1.radius_combined[i]
+            combined_radius = 10 * (
+                combined_radius - self.cfg.debris_cluster_config.radius_combined_ranges[0]
+            ) / (
+                self.cfg.debris_cluster_config.radius_combined_ranges[1]
+                - self.cfg.debris_cluster_config.radius_combined_ranges[0]
+            ) - 5
+            combined_radius = np.array([combined_radius])
+
+            tca_till = tca_till / 60
+
+            u_s = np.array([nsoe[1]])
+            inc_s = np.array([nsoe[4]])
+            raan_s = np.array([nsoe[5]])
+
+            delta_r_b = np.asarray(metric[3:5]) / 5e2
+
+            assert_no_nan(u_s, "u_s")
+            assert_no_nan(inc_s, "inc_s")
+            assert_no_nan(raan_s, "raan_s")
+            assert_no_nan(tca_till, "tca_till")
+            assert_no_nan(det_cov_scaled, "det_cov_scaled")
+            assert_no_nan(combined_radius, "combined_radius")
+            assert_no_nan(p_max_at_tca, "p_max_at_tca")
+            assert_no_nan(delta_r_b, "delta_r_b")
+
+            if not self.cfg.reduced_obs:
+                obs_debris[i, :] = np.concatenate(
+                    (
                         u_s,
                         inc_s,
                         raan_s,
@@ -229,14 +245,17 @@ class CamEnv(gym.Env):
                         det_cov_scaled,
                         combined_radius,
                         p_max_at_tca,
-                        delta_r_b), axis=0)
-                else:
-                    obs_debris[i,:] = np.concatenate((
+                        delta_r_b
+                    )
+                )
+            else:
+                obs_debris[i, :] = np.concatenate(
+                    (
                         tca_till,
                         p_max_at_tca,
                         delta_r_b
-                        ), axis=0)
-
+                    )
+                )
         obs_debris = np.array(obs_debris)
         
         obs = np.concatenate([obs_satellite.ravel(), obs_debris.ravel()], axis=0)
@@ -244,7 +263,7 @@ class CamEnv(gym.Env):
         return obs
     
 
-    def _reward_fun(self)->Tuple[float,bool]:
+    def _get_reward(self)->Tuple[float,bool]:
         reward = 0
         terminated = False
         self.cost = 0
@@ -254,77 +273,79 @@ class CamEnv(gym.Env):
         ade_vector = np.array([roe[-1][2],roe[-1][3]]) # reference ecc vector
         ade = np.linalg.norm(ade_vector) # reference ecc norm             
         
-        P_max_propagated = np.array(self.DebrisSwarm_1.metrics_at_tca)
-        P_max_product = abs(1 - np.prod(1 - P_max_propagated[:,1]))        
+        P_max_propagated = np.array(self.DebrisSwarm_1.metrics_at_tca[-1])
+        P_max_propagated = P_max_propagated[[x is not None for x in P_max_propagated[:, 1]]]
 
-        # Recovery phase rewards
-        # Check if any collisions occurred 
-        for i in range(self.DebrisSwarm_1.num_debris):
-            try:
+        P_max_product = abs(1 - np.prod(1 - P_max_propagated[:, 1]))     
+        
+        # Collsiion avoidance phase rewards
+        # Check if Debris exist
+        if self.DebrisSwarm_1.dt_steps<np.max(self.DebrisSwarm_1.conjuction_points_time):
+            # No collision risk
+            if P_max_product<=self.cfg.p_max_limit:
+                self.logger.debug("No Collision Risk")
+                self.logger.debug("reward: %s", reward)
+                reward += +10 -abs(self.delta_t0_and_man[1]*np.sign(self.f_direction[1]))
+            
+            # Collision risk
+            else: 
+                reward += np.minimum(10,-np.log(P_max_product)-15)
+
+        else: 
+            # Check if collisions have occured
+            for i in range(self.DebrisSwarm_1.num_debris):
                 conjunction_time = self.DebrisSwarm_1.conjuction_points_time[i]
-
-                # Skip debris whose TCA has not occurred yet
-                if self.DebrisSwarm_1.n <= conjunction_time:
+                p_max = self.DebrisSwarm_1.metrics_at_tca[-1][i][1]
+                
+                if conjunction_time<=self.DebrisSwarm_1.dt_steps:
                     
-                    if P_max_product<=self.cfg.p_max_limit: # No collision risk
-                        self.logger.debug("No Collision Risk")
+                    idx = next(
+                        y for y in range(len(self.DebrisSwarm_1.metrics_at_tca))
+                        if self.DebrisSwarm_1.metrics_at_tca[y][i][5] == conjunction_time
+                    )
+
+                    p_max_tca = self.DebrisSwarm_1.metrics_at_tca[idx][i][1] 
+
+                    if p_max_tca >= self.cfg.p_max_limit:
+                        reward = -100
+                        terminated = True
+
+                        self.logger.debug("Collision occurred")
+                        self.logger.debug("P_max = %s", p_max)
                         self.logger.debug("reward: %s", reward)
-
-                        reward = +10-abs(self.delta_t0_and_man[1]/5*np.sign(self.f_direction[1]))
                         
-                    else: # collision risk
-                        reward = np.minimum(10,-np.log(P_max_product)-15)
-
-
-                p_max = self.DebrisSwarm_1.sat_debris_object_collision_metrics[1 + i][conjunction_time][1]
-                self.logger.debug("P_max_%s: %s", i, p_max)
-
-
-                if p_max >= self.cfg.p_max_limit:
-                    reward = -100
-                    terminated = True
-
-                    self.logger.debug("Collision occurred")
-                    self.logger.debug("P_max = %s", p_max)
-                    self.logger.debug("reward: %s", reward)
-                    
-                    return reward, terminated
-
-            except (IndexError, KeyError):
-                continue
-            
-            
-            if  ade<=self.cfg.ade_norm_req and abs(adl)<=self.cfg.adl_req:
+                        return reward, terminated
+        
+            if ade <= self.cfg.ade_norm_req and abs(adl) <= self.cfg.adl_req:
                 reward = +1e3
                 terminated = True
                 
-            else:           
-                adl_based_weight = (abs(adl)/self.cfg.adl_req)
-                ade_based_weight = (ade/self.cfg.ade_norm_req)
+                return reward, terminated
+            
+            else:
+                adl_based_weight = abs(adl) / self.cfg.adl_req
+                ade_based_weight = ade / self.cfg.ade_norm_req
 
-                reward = (-adl_based_weight -ade_based_weight)/3
-                
+                reward = (-adl_based_weight - ade_based_weight) / 3
+
             self.logger.debug("Recovery")
             self.logger.debug("limit = %s", self.cfg.p_max_limit)
             self.logger.debug("P_max_product = %s", P_max_product)
             self.logger.debug("reward: %s", reward)
 
-
-            return reward, terminated
-
-                        
         self.logger.debug("CAM")
         self.logger.debug("limit = %s", self.cfg.p_max_limit)
         self.logger.debug("P_max_product = %s", P_max_product)
         self.logger.debug("reward: %s", reward)
 
         return reward, terminated
-                
-                
+    
     def _discretize_action(self, action:int)->list:
-        dis_actions_list = [[0,0],
-                            [0,+1], 
-                            [0,-1]]
+        dis_actions_list = [
+            [0,0],
+            [0,+1], 
+            [0,-1]
+        ]
 
         return dis_actions_list[action]
     
@@ -343,17 +364,11 @@ class CamEnv(gym.Env):
         delay_duration_thrust:np.ndarray = action["continuous"]
         delay_duration_thrust = self._clip_and_rescale(delay_duration_thrust, self.cfg.low_action, self.cfg.high_action)
 
-
-        
         self.f_direction = self._discretize_action(int(action["discrete"]))
         
-        P_max_propagated = np.array(self.DebrisSwarm_1.metrics_at_tca)
+        P_max_propagated = np.array(self.DebrisSwarm_1.metrics_at_tca[-1])
         P_max_product = abs(1 - np.prod(1 - P_max_propagated[:,1]))      
-        
-        if P_max_product<=self.cfg.p_max_limit and P_max_product != 0:
-            self.f_direction = [0,0] 
-
-        
+                
         manplan = self.f_direction + delay_duration_thrust.tolist()
         self.delta_t0_and_man = delay_duration_thrust 
                 
@@ -361,21 +376,21 @@ class CamEnv(gym.Env):
         self.DebrisSwarm_1.apply_manplan(manplan=manplan)
                 
         # Calculate reward
-        reward, terminated = self._reward_fun()        
+        reward, terminated = self._get_reward()        
         truncated = False 
         
         # Truncate if episode time over
-        if (self.DebrisSwarm_1.n) >= self.cfg.max_time_index:
+        if (self.DebrisSwarm_1.dt_steps) >= self.cfg.max_time_index:
             truncated = True
             
         info ={
             "cost": self.cost,
             "sojourn_t": sum(self.delta_t0_and_man)/60, #Convert to hours
-            "n": self.DebrisSwarm_1.n
+            "n": self.DebrisSwarm_1.dt_steps
         } # Discrete time in simulation (real time = dt*index)
         
         self.rewards_plot_list.append(reward)
-        self.n_plot_list.append(self.DebrisSwarm_1.n)
+        self.n_plot_list.append(self.DebrisSwarm_1.dt_steps)
         
         self.logger.debug("\n====================")            
         return self._observation_states(), reward, terminated, truncated, info
@@ -384,17 +399,18 @@ class CamEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=None)
-                 
+        
         self.DebrisSwarm_1 = SatDebrisCluster(self.cfg.debris_cluster_config)
         self.rewards_plot_list = []
         self.n_plot_list = []
         
-        info ={"sat": self.DebrisSwarm_1,
-               "reward": 0,
-               "cost":0,
-               "sojourn_t": 0,
-               "n":0}
-
+        info = {
+            "sat": self.DebrisSwarm_1,
+            "reward": 0,
+            "cost":0,
+            "sojourn_t": 0,
+            "n":0
+        }
 
         return self._observation_states(), info
 
@@ -452,7 +468,7 @@ class CamEnv(gym.Env):
         ade1 = np.linalg.norm(roe[:, [2, 3]], axis=1)
         simulation_times = np.array(simulation_times)
         rewards = np.array(rewards)
-        controls = np.array(self.DebrisSwarm_1.controls_RTN)
+        controls = np.array(self.DebrisSwarm_1.forces_rtn)
         R, T, N = controls[:,0], controls[:,1], controls[:,2]
 
         fig.add_trace(go.Scatter(y=ada1, mode='lines'), row=1, col=1)
@@ -470,8 +486,23 @@ class CamEnv(gym.Env):
         fig.add_trace(go.Scatter(y=R, mode='markers', name='Radial'), row=5, col=1)
         fig.update_yaxes(title_text="$f_r$(mN)", row=5, col=1)
 
-        P_max = self.DebrisSwarm_1.p_max_predictions
-        fig.add_trace(go.Scatter(x=simulation_times,y=np.log10(P_max), mode='markers', name='P^{max}_c'), row=6, col=1)
+        P_max = np.array([
+            m[1] for m in self.DebrisSwarm_1.metrics_at_tca
+        ])
+
+        times = np.array([
+            m[-1] for m in self.DebrisSwarm_1.metrics_at_tca
+        ])
+        
+        fig.add_trace(
+            go.Scatter(
+                x=times,
+                y=np.log10(np.maximum(P_max, 1e-12)),
+                mode="markers"
+            ),
+            row=6,
+            col=1,
+        )
         fig.update_yaxes(title_text=r"$\log(P^\text{c}_\text{max})$", row=6, col=1)
 
         for t in simulation_times:
@@ -604,126 +635,116 @@ class CamEnv(gym.Env):
         # Radial thrust plot
         fig4, ax = plt.subplots(figsize=(8, 2))
 
-        rtn = np.asarray(self.DebrisSwarm_1.controls_RTN)
+        rtn = np.asarray(self.DebrisSwarm_1.forces_rtn)
         ax.plot(rtn[:, 0])
         
         ax.set_xlabel("Minutes")
         ax.set_ylabel("$f_r$ [N]")
 
         plt.show()
-
         
-        # Projected probability plot
+        
+        
         fig3, ax = plt.subplots(figsize=(8, 2))
-        pmax = np.array(self.DebrisSwarm_1.p_max_per_debris)
 
-        for i in range(self.DebrisSwarm_1.num_debris):
-            times_full = np.array(self.DebrisSwarm_1.manaplan_call_relative_time)
-            times = times_full / 60
-            n = min(times.size, pmax[i].size)
-            vals = np.maximum(pmax[i][:n], 1e-6)
-            ax.plot(times[:n], np.log10(vals))      
-            
-        ax.axhline(np.log10(self.cfg.p_max_limit), label=r"$\log_{10}(P^\mathrm{max}_{c,\mathrm{req}})$",color="red")
-        ax.legend()
-        
+        times = np.array([
+            m[0][5] for m in self.DebrisSwarm_1.metrics_at_tca
+        ]) * self.cfg.debris_cluster_config.dt / 60
+                
+        for debris_idx in range(self.DebrisSwarm_1.num_debris):
+
+            pmax = np.array([
+                m[debris_idx][1]
+                for m in self.DebrisSwarm_1.metrics_at_tca
+            ])
+
+            ax.plot(
+                times,
+                np.log10(np.maximum(pmax, 1e-6)),
+                label=f"Debris {debris_idx}",
+            )
+
+        pmax_product = np.array([
+            abs(1 - np.prod(1 - np.array([metric[1] for metric in m])))
+            for m in self.DebrisSwarm_1.metrics_at_tca
+        ])
+
+        ax.plot(
+            times,
+            np.log10(np.maximum(pmax_product, 1e-6)),
+            color="black",
+            linewidth=2,
+            label=r"$P_c^{\max,\mathrm{cum}}$",
+        )
+
+        ax.axhline(
+            np.log10(self.cfg.p_max_limit),
+            color="red",
+            linestyle="--",
+            label=r"$\log_{10}(P^\mathrm{max}_{c,\mathrm{req}})$",
+        )
+
         ax.set_xlabel("Minutes")
-        ax.set_ylabel(r"$\log_{10}(P^\mathrm{max}_{c})$")
-
-
+        ax.set_ylabel(r"$\log_{10}(P_c^{\max})$")
+        ax.legend()                
+        
+        
         
         # 3D Plot
         fig2 = plt.figure(figsize=(4, 4), constrained_layout=True)
         ax = fig2.add_subplot(111, projection="3d")
-        
+
         fig2.patch.set_facecolor("white")
-        ax.xaxis.set_pane_color((0.92,0.92,0.92,1))
-        ax.yaxis.set_pane_color((0.92,0.92,0.92,1))
-        ax.zaxis.set_pane_color((0.92,0.92,0.92,1))
+        ax.xaxis.set_pane_color((0.92, 0.92, 0.92, 1))
+        ax.yaxis.set_pane_color((0.92, 0.92, 0.92, 1))
+        ax.zaxis.set_pane_color((0.92, 0.92, 0.92, 1))
         ax.patch.set_facecolor("none")
 
+        prim = np.asarray(self.DebrisSwarm_1.rvm_sat)
 
-        rvm_total = np.array(self.DebrisSwarm_1.sat_debris_rvm)
-
-        prim = rvm_total[0]
-        # sec  = rvm_total[1]
-        cp = self.DebrisSwarm_1.conjuction_points_time
-    
-        ax.scatter(prim[:,0], prim[:,1], prim[:,2], s=5, label="Satellite")
-        for i in range(self.DebrisSwarm_1.num_debris):
-            sec  = rvm_total[i+1]
-            x_cp, y_cp, z_cp = sec[cp[i], :3]
-            if i == 0:
-                ax.scatter(x_cp, y_cp, z_cp, s=3, label="Conjunction Point", color="black")
-            ax.scatter(x_cp, y_cp, z_cp, s=3, color="black")
-            ax.scatter(x_cp, y_cp, z_cp, s=80, color="black")
-            if i==1:
-                ax.scatter(sec[:,0],  sec[:,1],  sec[:,2],  s=3, label="Debris", color='red')
-            else:
-                ax.scatter(sec[:,0],  sec[:,1],  sec[:,2],  s=3, color='red')
-
-        ax.set_xlabel("$X$ [m]")
-        ax.set_ylabel("$Y$ [m]")
-        ax.set_zlabel("$Z$ [m]")
-
-        ax.set_box_aspect(None, zoom=0.80)       
-        ax.grid(False)
-        ax.legend(markerscale=3)
-        
-        
-        
-        
-        # firing 3D plot
-
-        N = 110
-        arrow_len = 1e6
-
-        fig7 = plt.figure(figsize=(4, 4), constrained_layout=True)
-        ax = fig7.add_subplot(111, projection="3d")
-        
-        fig7.patch.set_facecolor("white")
-        ax.xaxis.pane.set_facecolor((0.92,0.92,0.92,1))
-        ax.yaxis.pane.set_facecolor((0.92,0.92,0.92,1))
-        ax.zaxis.pane.set_facecolor((0.92,0.92,0.92,1))
-        ax.patch.set_facecolor("none")
-
-        ax.scatter(prim[:N,0], prim[:N,1], prim[:N,2], s=4)
-
-        norms = np.linalg.norm(prim[:N], axis=1)
-        r_hat = prim[:N] / norms[:, None]
-        sign = np.sign(rtn[:N,0])[:, None]
-        radial_vecs = r_hat * sign * arrow_len
-
-        ax.quiver(
-            prim[:N,0], prim[:N,1], prim[:N,2],
-            radial_vecs[:,0], radial_vecs[:,1], radial_vecs[:,2],
-            color="red"
+        ax.scatter(
+            prim[:, 0], prim[:, 1], prim[:, 2],
+            s=5,
+            label="Satellite"
         )
-        
-        
-        
+
+        for i, sec in enumerate(self.DebrisSwarm_1.cached_rvm_debris):
+
+            sec = np.asarray(sec)
+
+            # Last cached point is the TCA
+            x_cp, y_cp, z_cp = sec[-1, :3]
+
+            if i == 0:
+                ax.scatter(
+                    x_cp, y_cp, z_cp,
+                    s=3,
+                    label="Conjunction Point", color="black"
+                )
+
+                ax.scatter(
+                    x_cp, y_cp, z_cp,
+                    s=80,
+                    color="black",
+                )
+                ax.scatter(
+                    sec[:, 0], sec[:, 1], sec[:, 2],
+                    s=3,
+                    color="red",
+                    label="Debris"
+                )
+            else:
+                ax.scatter(x_cp, y_cp, z_cp, s=80, color="black")
+                ax.scatter(sec[:, 0], sec[:, 1], sec[:, 2], s=3, color="red")
+
         ax.set_xlabel("$X$ [m]")
         ax.set_ylabel("$Y$ [m]")
         ax.set_zlabel("$Z$ [m]")
-        ax.view_init(elev=30, azim=45)
 
-        ax.set_box_aspect(None, zoom=0.80)       
+        ax.set_box_aspect(None, zoom=0.80)
         ax.grid(False)
-
-        temp_dir = Path("temp")
-        temp_dir.mkdir(exist_ok=True)
-
-        for fig in [fig, fig4, fig3, fig2, fig7]:
-            fig.savefig(temp_dir / f"{fig.get_label() or id(fig)}.png",
-                        bbox_inches="tight")
-            fig.savefig(temp_dir / f"{fig.get_label() or id(fig)}.pdf",
-                        bbox_inches="tight")
-
-
-        plt.show()
-        
-        
-        
+        ax.legend(markerscale=3)                
+                
 
         return
 
