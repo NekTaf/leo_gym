@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Low Earth Orbit Gym: A library for training RL-policies for control of satellites operating in LEO"
 readme = "README.md"
 requires-python = ">=3.9"
-authors = [{ name = "Nektarios Aristeidis Tafanidis", email = "Nektariostaf@gmail.com" }]
+authors = [{ name = "Nektarios Aristeidis Tafanidis", email = "mail@natafanidis.com" }]
 license = { text = "MIT" }
 
 dependencies = [
